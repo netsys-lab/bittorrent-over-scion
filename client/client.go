@@ -31,11 +31,13 @@ func completeHandshake(conn net.Conn, infohash, peerID [20]byte) (*handshake.Han
 	req := handshake.New(infohash, peerID)
 	_, err := conn.Write(req.Serialize())
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 
 	res, err := handshake.Read(conn)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	if !bytes.Equal(res.InfoHash[:], infohash[:]) {
@@ -60,7 +62,7 @@ func recvBitfield(conn net.Conn) (bitfield.Bitfield, error) {
 		err := fmt.Errorf("Expected bitfield but got ID %d", msg.ID)
 		return nil, err
 	}
-
+	fmt.Println(msg.Payload)
 	return msg.Payload, nil
 }
 
@@ -78,6 +80,7 @@ func New(peer peers.Peer, peerID, infoHash [20]byte) (*Client, error) {
 		return nil, err
 	}
 
+	fmt.Println("Completed handshake")
 	bf, err := recvBitfield(conn)
 	if err != nil {
 		conn.Close()
@@ -102,6 +105,7 @@ func (c *Client) Read() (*message.Message, error) {
 
 // SendRequest sends a Request message to the peer
 func (c *Client) SendRequest(index, begin, length int) error {
+	// fmt.Printf("Requesting %d, %d, %d\n", index, begin, length)
 	req := message.FormatRequest(index, begin, length)
 	_, err := c.Conn.Write(req.Serialize())
 	return err

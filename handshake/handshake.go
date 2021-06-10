@@ -21,6 +21,13 @@ func New(infoHash, peerID [20]byte) *Handshake {
 	}
 }
 
+// New creates a new handshake with the standard pstr
+func NewEmpty() *Handshake {
+	return &Handshake{
+		Pstr: "BitTorrent protocol",
+	}
+}
+
 // Serialize serializes the handshake to a buffer
 func (h *Handshake) Serialize() []byte {
 	buf := make([]byte, len(h.Pstr)+49)

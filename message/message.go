@@ -44,6 +44,14 @@ func FormatRequest(index, begin, length int) *Message {
 	return &Message{ID: MsgRequest, Payload: payload}
 }
 
+func ParseRequest(msg *Message) (int, int, int) {
+	index := binary.BigEndian.Uint32(msg.Payload[0:4])
+	begin := binary.BigEndian.Uint32(msg.Payload[4:8])
+	length := binary.BigEndian.Uint32(msg.Payload[8:12])
+	// fmt.Printf("Received %d, %d, %d\n", index, begin, length)
+	return int(index), int(begin), int(length)
+}
+
 // FormatHave creates a HAVE message
 func FormatHave(index int) *Message {
 	payload := make([]byte, 4)
@@ -72,6 +80,7 @@ func ParsePiece(index int, buf []byte, msg *Message) (int, error) {
 		return 0, fmt.Errorf("Data too long [%d] for offset %d with length %d", len(data), begin, len(buf))
 	}
 	copy(buf[begin:], data)
+	// fmt.Println(msg.Payload[:128])
 	return len(data), nil
 }
 

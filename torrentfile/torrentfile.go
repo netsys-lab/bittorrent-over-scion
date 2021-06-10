@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/jackpal/bencode-go"
 	"github.com/veggiedefender/torrent-client/p2p"
+	"github.com/veggiedefender/torrent-client/peers"
 )
 
 // Port to listen on
@@ -22,6 +24,7 @@ type TorrentFile struct {
 	PieceLength int
 	Length      int
 	Name        string
+	Content     []byte
 }
 
 type bencodeInfo struct {
@@ -37,20 +40,30 @@ type bencodeTorrent struct {
 }
 
 // DownloadToFile downloads a torrent and writes it to a file
-func (t *TorrentFile) DownloadToFile(path string) error {
+func (t *TorrentFile) DownloadToFile(path string, peer string) error {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
 		return err
 	}
+	var targetPeers []peers.Peer
+	if peer != "" {
+		pAddr, _ := net.ResolveTCPAddr("tcp", peer)
+		targetPeers = make([]peers.Peer, 1)
+		targetPeers[0] = peers.Peer{
+			IP:   pAddr.IP,
+			Port: uint16(pAddr.Port),
+		}
 
-	peers, err := t.requestPeers(peerID, Port)
-	if err != nil {
-		return err
+	} else {
+		targetPeers, err = t.requestPeers(peerID, Port)
+		if err != nil {
+			return err
+		}
 	}
 
 	torrent := p2p.Torrent{
-		Peers:       peers,
+		Peers:       targetPeers,
 		PeerID:      peerID,
 		InfoHash:    t.InfoHash,
 		PieceHashes: t.PieceHashes,

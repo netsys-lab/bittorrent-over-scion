@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"log"
-	"runtime"
 	"time"
 
 	"github.com/veggiedefender/torrent-client/client"
@@ -63,6 +62,7 @@ func (state *pieceProgress) readMessage() error {
 	switch msg.ID {
 	case message.MsgUnchoke:
 		state.client.Choked = false
+		fmt.Println("Got unchoke message")
 	case message.MsgChoke:
 		state.client.Choked = true
 	case message.MsgHave:
@@ -123,6 +123,7 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 }
 
 func checkIntegrity(pw *pieceWork, buf []byte) error {
+	// TODO: Hashing
 	hash := sha1.Sum(buf)
 	if !bytes.Equal(hash[:], pw.hash[:]) {
 		return fmt.Errorf("Index %d failed integrity check", pw.index)
@@ -141,7 +142,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 
 	c.SendUnchoke()
 	c.SendInterested()
-
+	fmt.Println("Starting Download")
 	for pw := range workQueue {
 		if !c.Bitfield.HasPiece(pw.index) {
 			workQueue <- pw // Put piece back on the queue
@@ -149,6 +150,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 		}
 
 		// Download the piece
+		// fmt.Printf("Attempting to download piece %d\n", pw.index)
 		buf, err := attemptDownloadPiece(c, pw)
 		if err != nil {
 			log.Println("Exiting", err)
@@ -156,12 +158,13 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 			return
 		}
 
-		err = checkIntegrity(pw, buf)
+		// fmt.Println(buf[:128])
+		/*err = checkIntegrity(pw, buf)
 		if err != nil {
-			log.Printf("Piece #%d failed integrity check\n", pw.index)
+			log.Fatalf("Piece #%d failed integrity check\n", pw.index)
 			workQueue <- pw // Put piece back on the queue
 			continue
-		}
+		}*/
 
 		c.SendHave(pw.index)
 		results <- &pieceResult{pw.index, buf}
@@ -207,9 +210,9 @@ func (t *Torrent) Download() ([]byte, error) {
 		copy(buf[begin:end], res.buf)
 		donePieces++
 
-		percent := float64(donePieces) / float64(len(t.PieceHashes)) * 100
-		numWorkers := runtime.NumGoroutine() - 1 // subtract 1 for main thread
-		log.Printf("(%0.2f%%) Downloaded piece #%d from %d peers\n", percent, res.index, numWorkers)
+		// percent := float64(donePieces) / float64(len(t.PieceHashes)) * 100
+		// numWorkers := runtime.NumGoroutine() - 1 // subtract 1 for main thread
+		// log.Printf("(%0.2f%%) Downloaded piece #%d from %d peers\n", percent, res.index, numWorkers)
 	}
 	close(workQueue)
 
