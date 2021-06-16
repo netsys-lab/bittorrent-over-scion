@@ -8,6 +8,7 @@ import (
 
 	"github.com/veggiedefender/torrent-client/bitfield"
 	"github.com/veggiedefender/torrent-client/peers"
+	"github.com/veggiedefender/torrent-client/socket"
 
 	"github.com/veggiedefender/torrent-client/message"
 
@@ -69,10 +70,14 @@ func recvBitfield(conn net.Conn) (bitfield.Bitfield, error) {
 // New connects with a peer, completes a handshake, and receives a handshake
 // returns an err if any of those fail.
 func New(peer peers.Peer, peerID, infoHash [20]byte) (*Client, error) {
-	conn, err := net.DialTimeout("tcp", peer.String(), 3*time.Second)
+	sock := socket.NewSocket("scion")
+	conn, err := sock.Dial(peer.Addr, peer.Index)
+	// conn, err := net.DialTimeout("tcp", peer.String(), 3*time.Second)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("Dial to %s done, starting handshake", peer.String())
 
 	_, err = completeHandshake(conn, infoHash, peerID)
 	if err != nil {

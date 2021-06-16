@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/scionproto/scion/go/lib/snet"
 	"github.com/veggiedefender/torrent-client/bitfield"
 	"github.com/veggiedefender/torrent-client/handshake"
 	"github.com/veggiedefender/torrent-client/message"
 	"github.com/veggiedefender/torrent-client/peers"
+	"github.com/veggiedefender/torrent-client/socket"
 	"github.com/veggiedefender/torrent-client/torrentfile"
 )
 
@@ -19,18 +21,18 @@ type Server struct {
 	peers       []peers.Peer
 	infoHash    [20]byte
 	lAddr       string
-	localAddr   *net.TCPAddr
-	listener    *net.TCPListener
+	localAddr   *snet.UDPAddr
+	listener    *net.Listener
 	Bitfield    bitfield.Bitfield
 	torrentFile *torrentfile.TorrentFile
 }
 
 func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile) (*Server, error) {
-	localAddr, err := net.ResolveTCPAddr("tcp", lAddr)
-	if err != nil {
-		return nil, err
-	}
-
+	// localAddr, err := net.ResolveTCPAddr("tcp", lAddr)
+	//if err != nil {
+	//	return nil, err
+	//}
+	localAddr, _ := snet.ParseUDPAddr(lAddr)
 	s := &Server{
 		peers:       make([]peers.Peer, 0),
 		Conns:       make([]*net.Conn, 0),
@@ -50,31 +52,33 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile) (*Server, err
 
 func (s *Server) ListenHandshake() error {
 	var err error
-	s.listener, err = net.ListenTCP("tcp", s.localAddr)
+	sock := socket.NewSocket("scion")
+	s.listener, err = sock.Listen(s.localAddr.String())
 	if err != nil {
 		return err
 	}
+	// s.listener, err = net.ListenTCP("tcp", s.localAddr)
 
-	fmt.Printf("Listen TCP on %s\n", s.localAddr)
+	// fmt.Printf("Listen TCP on %s\n", s.localAddr)
 
 	for {
 		// Listen for an incoming connection.
-		conn, err := s.listener.Accept()
+		conn, err := sock.Accept()
 		fmt.Printf("Accepted TCP Connection on %s\n", conn.LocalAddr())
 		if err != nil {
 			fmt.Println("Error accepting: ", err.Error())
 			return err
 		}
 		s.Conns = append(s.Conns, &conn)
-		go s.handleConnection(conn.(*net.TCPConn))
+		go s.handleConnection(&conn)
 	}
 }
 
-func (s *Server) handleConnection(conn *net.TCPConn) error {
+func (s *Server) handleConnection(conn *net.Conn) error {
 	s.handleIncomingHandshake(conn)
 
 	for {
-		msg, err := message.Read(conn)
+		msg, err := message.Read(*conn)
 		if err != nil {
 			return err
 		}
@@ -86,7 +90,7 @@ func (s *Server) handleConnection(conn *net.TCPConn) error {
 		switch msg.ID {
 		case message.MsgInterested:
 			retMsg := message.Message{ID: message.MsgUnchoke, Payload: []byte{}}
-			_, err := conn.Write(retMsg.Serialize())
+			_, err := (*conn).Write(retMsg.Serialize())
 			if err != nil {
 				return err
 			}
@@ -100,7 +104,7 @@ func (s *Server) handleConnection(conn *net.TCPConn) error {
 			buf = append(buf, s.torrentFile.Content[(index*s.torrentFile.PieceLength)+begin:(index*s.torrentFile.PieceLength)+begin+length]...)
 			// fmt.Println(buf[:128])
 			retMsg := message.Message{ID: message.MsgPiece, Payload: buf}
-			_, err := conn.Write(retMsg.Serialize())
+			_, err := (*conn).Write(retMsg.Serialize())
 			if err != nil {
 				return err
 			}
@@ -108,22 +112,22 @@ func (s *Server) handleConnection(conn *net.TCPConn) error {
 	}
 }
 
-func (s *Server) handleIncomingHandshake(conn *net.TCPConn) error {
+func (s *Server) handleIncomingHandshake(conn *net.Conn) error {
 	fmt.Println("Waiting for Handshake message")
-	hs, err := handshake.Read(conn)
+	hs, err := handshake.Read(*conn)
 	fmt.Println("Got for Handshake message")
 	if err != nil {
 		return err
 	}
 
-	_, err = conn.Write(hs.Serialize())
+	_, err = (*conn).Write(hs.Serialize())
 	if err != nil {
 		return err
 	}
 	fmt.Println("Sent back Handshake message")
 	fmt.Println("Sending back bitfield")
 	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
-	_, err = conn.Write(msg.Serialize())
+	_, err = (*conn).Write(msg.Serialize())
 	if err != nil {
 		return err
 	}

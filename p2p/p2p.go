@@ -1,8 +1,6 @@
 package p2p
 
 import (
-	"bytes"
-	"crypto/sha1"
 	"fmt"
 	"log"
 	"time"
@@ -124,16 +122,17 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 
 func checkIntegrity(pw *pieceWork, buf []byte) error {
 	// TODO: Hashing
-	hash := sha1.Sum(buf)
+	/*hash := sha1.Sum(buf)
 	if !bytes.Equal(hash[:], pw.hash[:]) {
 		return fmt.Errorf("Index %d failed integrity check", pw.index)
-	}
+	}*/
 	return nil
 }
 
 func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork, results chan *pieceResult) {
 	c, err := client.New(peer, t.PeerID, t.InfoHash)
 	if err != nil {
+		fmt.Println(err)
 		log.Printf("Could not handshake with %s. Disconnecting\n", peer.IP)
 		return
 	}
@@ -198,6 +197,7 @@ func (t *Torrent) Download() ([]byte, error) {
 
 	// Start workers
 	for _, peer := range t.Peers {
+		time.Sleep(100 * time.Millisecond)
 		go t.startDownloadWorker(peer, workQueue, results)
 	}
 

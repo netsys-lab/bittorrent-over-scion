@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"fmt"
-	"net"
 	"os"
 
 	"github.com/jackpal/bencode-go"
+	"github.com/scionproto/scion/go/lib/snet"
 	"github.com/veggiedefender/torrent-client/p2p"
 	"github.com/veggiedefender/torrent-client/peers"
 )
@@ -40,19 +40,28 @@ type bencodeTorrent struct {
 }
 
 // DownloadToFile downloads a torrent and writes it to a file
-func (t *TorrentFile) DownloadToFile(path string, peer string) error {
+func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int) error {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
 		return err
 	}
 	var targetPeers []peers.Peer
+
 	if peer != "" {
-		pAddr, _ := net.ResolveTCPAddr("tcp", peer)
-		targetPeers = make([]peers.Peer, 1)
-		targetPeers[0] = peers.Peer{
-			IP:   pAddr.IP,
-			Port: uint16(pAddr.Port),
+		i := 0
+		pAddr, _ := snet.ParseUDPAddr(peer)
+		targetPeers = make([]peers.Peer, numCons)
+		for i < numCons {
+			// pAddr, _ := net.ResolveTCPAddr("tcp", peer)
+
+			targetPeers[i] = peers.Peer{
+				IP:    pAddr.Host.IP,
+				Port:  uint16(pAddr.Host.Port),
+				Addr:  fmt.Sprintf("%s:%d", peer, 42423+i),
+				Index: i,
+			}
+			i++
 		}
 
 	} else {
@@ -92,6 +101,8 @@ func (t *TorrentFile) DownloadToFile(path string, peer string) error {
 func Open(path string) (TorrentFile, error) {
 	file, err := os.Open(path)
 	if err != nil {
+		fmt.Printf("Open for file failed %s", path)
+		fmt.Println(err)
 		return TorrentFile{}, err
 	}
 	defer file.Close()
