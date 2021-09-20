@@ -25,6 +25,7 @@ type Torrent struct {
 	PieceLength int
 	Length      int
 	Name        string
+	Local       string
 }
 
 type pieceWork struct {
@@ -89,8 +90,9 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 
 	// Setting a deadline helps get unresponsive peers unstuck.
 	// 30 seconds is more than enough time to download a 262 KB piece
-	c.Conn.SetDeadline(time.Now().Add(30 * time.Second))
-	defer c.Conn.SetDeadline(time.Time{}) // Disable the deadline
+	// TODO: Deadline Methods
+	// c.Conn.SetDeadline(time.Now().Add(30 * time.Second))
+	// defer c.Conn.SetDeadline(time.Time{}) // Disable the deadline
 
 	for state.downloaded < pw.length {
 		// If unchoked, send requests until we have enough unfulfilled requests
@@ -130,44 +132,54 @@ func checkIntegrity(pw *pieceWork, buf []byte) error {
 }
 
 func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork, results chan *pieceResult) {
-	c, err := client.New(peer, t.PeerID, t.InfoHash)
+	mpC := client.NewMPClient()
+	clients, err := mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash)
 	if err != nil {
 		fmt.Println(err)
 		log.Printf("Could not handshake with %s. Disconnecting\n", peer.IP)
 		return
 	}
-	defer c.Conn.Close()
 	log.Printf("Completed handshake with %s\n", peer.IP)
 
-	c.SendUnchoke()
-	c.SendInterested()
-	fmt.Println("Starting Download")
-	for pw := range workQueue {
-		if !c.Bitfield.HasPiece(pw.index) {
-			workQueue <- pw // Put piece back on the queue
-			continue
+	for _, c := range clients {
+		c.SendUnchoke()
+		c.SendInterested()
+		fmt.Println("Starting Download")
+		for pw := range workQueue {
+			if !c.Bitfield.HasPiece(pw.index) {
+				workQueue <- pw // Put piece back on the queue
+				continue
+			}
+
+			// Download the piece
+			// fmt.Printf("Attempting to download piece %d\n", pw.index)
+			buf, err := attemptDownloadPiece(c, pw)
+			if err != nil {
+				log.Println("Exiting", err)
+				workQueue <- pw // Put piece back on the queue
+				return
+			}
+
+			// fmt.Println(buf[:128])
+			/*err = checkIntegrity(pw, buf)
+			if err != nil {
+				log.Fatalf("Piece #%d failed integrity check\n", pw.index)
+				workQueue <- pw // Put piece back on the queue
+				continue
+			}*/
+
+			c.SendHave(pw.index)
+			results <- &pieceResult{pw.index, buf}
 		}
-
-		// Download the piece
-		// fmt.Printf("Attempting to download piece %d\n", pw.index)
-		buf, err := attemptDownloadPiece(c, pw)
-		if err != nil {
-			log.Println("Exiting", err)
-			workQueue <- pw // Put piece back on the queue
-			return
-		}
-
-		// fmt.Println(buf[:128])
-		/*err = checkIntegrity(pw, buf)
-		if err != nil {
-			log.Fatalf("Piece #%d failed integrity check\n", pw.index)
-			workQueue <- pw // Put piece back on the queue
-			continue
-		}*/
-
-		c.SendHave(pw.index)
-		results <- &pieceResult{pw.index, buf}
 	}
+	/*c, err := client.New(peer, t.PeerID, t.InfoHash)
+	if err != nil {
+		fmt.Println(err)
+		log.Printf("Could not handshake with %s. Disconnecting\n", peer.IP)
+		return
+	}*/
+	// defer c.Conn.Close()
+
 }
 
 func (t *Torrent) calculateBoundsForPiece(index int) (begin int, end int) {

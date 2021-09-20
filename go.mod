@@ -14,6 +14,7 @@ require (
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/netsec-ethz/scion-apps v0.3.0
+	github.com/netsys-lab/scion-path-discovery v0.0.0-20210920082250-82e0785b5f6c
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml v1.9.3 // indirect
 	github.com/prometheus/common v0.29.0 // indirect
