@@ -3,11 +3,13 @@ package client
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/veggiedefender/torrent-client/bitfield"
 	"github.com/veggiedefender/torrent-client/peers"
@@ -41,7 +43,8 @@ func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handsh
 	// TODO: Add Deadline Methods
 	// conn.SetDeadline(time.Now().Add(3 * time.Second))
 	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
-
+	time.Sleep(3 * time.Second)
+	log.Infof("Starting handshake...")
 	req := handshake.New(infohash, peerID)
 	_, err := conn.Write(req.Serialize())
 	if err != nil {
@@ -76,7 +79,7 @@ func recvBitfield(conn packets.UDPConn) (bitfield.Bitfield, error) {
 		err := fmt.Errorf("Expected bitfield but got ID %d", msg.ID)
 		return nil, err
 	}
-	fmt.Println(msg.Payload)
+	// fmt.Println(msg.Payload)
 	return msg.Payload, nil
 }
 
@@ -94,7 +97,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	}
 
 	sel := ClientSelection{}
-
+	log.Warnf("Dialing from %s to %s", local, address)
 	mpSock := smp.NewMPPeerSock(local, address)
 	err = mpSock.Listen()
 
@@ -109,24 +112,31 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	}
 
 	clients := make([]*Client, 0)
+	var bf bitfield.Bitfield
+	log.Warnf("Having %d CONNECTIONS", len(mpSock.UnderlaySocket.GetConnections()))
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
+
+		if i == 0 {
+			continue
+		}
+
 		// Handshake only over first conn
 		// TODO: Make this more flexible and don't stop all on error
-		var bf bitfield.Bitfield
-		if i == 0 {
-			_, err = completeHandshake(v, infoHash, peerID)
-			if err != nil {
-				mpSock.UnderlaySocket.CloseAll()
-				return nil, err
-			}
 
-			fmt.Println("Completed handshake")
-			bf, err = recvBitfield(v)
-			if err != nil {
-				mpSock.UnderlaySocket.CloseAll()
-				return nil, err
-			}
+		// if i == 1 {
+		_, err = completeHandshake(v, infoHash, peerID)
+		if err != nil {
+			mpSock.UnderlaySocket.CloseAll()
+			return nil, err
 		}
+
+		fmt.Printf("Completed handshake over conn %p\n", v)
+		bf, err = recvBitfield(v)
+		if err != nil {
+			mpSock.UnderlaySocket.CloseAll()
+			return nil, err
+		}
+		// }
 		c := Client{
 			peer:     peer,
 			peerID:   peerID,

@@ -40,7 +40,7 @@ type bencodeTorrent struct {
 }
 
 // DownloadToFile downloads a torrent and writes it to a file
-func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int) error {
+func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int, local string) error {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
@@ -79,6 +79,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int) erro
 		PieceLength: t.PieceLength,
 		Length:      t.Length,
 		Name:        t.Name,
+		Local:       local,
 	}
 	buf, err := torrent.Download()
 	if err != nil {

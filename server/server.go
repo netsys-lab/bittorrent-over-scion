@@ -8,6 +8,7 @@ import (
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/scionproto/scion/go/lib/snet"
 	"github.com/veggiedefender/torrent-client/bitfield"
@@ -81,9 +82,9 @@ func (s *Server) ListenHandshake() error {
 	if err != nil {
 		return err
 	}
-	sel := ServerSelection{}
+	// sel := ServerSelection{}
 	// TODO: Add pathselection
-	remote, err := sock.WaitForPeerConnect(&sel)
+	remote, err := sock.WaitForPeerConnect(nil)
 	if err != nil {
 		return err
 	}
@@ -91,8 +92,7 @@ func (s *Server) ListenHandshake() error {
 	sock.SetPeer(remote)
 
 	// TODO: Remove public fields
-	connections := sock.UnderlaySocket.GetConnections()
-
+	// connections := sock.UnderlaySocket.GetConnections()
 	// TODO: Listen for connection change and update slice
 
 	/*fmt.Printf("Accepted SCION/QUIC Connection on %s\n", conn.LocalAddr())
@@ -100,20 +100,48 @@ func (s *Server) ListenHandshake() error {
 		fmt.Println("Error accepting: ", err.Error())
 		return err
 	}*/
-	for _, conn := range connections {
+	/*for i, conn := range connections {
 		s.Conns = append(s.Conns, conn)
-		go s.handleConnection(conn)
+		log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
+		go s.handleConnection(conn, true)
+	}*/
+	for {
+		conns := <-sock.OnConnectionsChange
+		log.Infof("Got new connections %d", len(conns))
+		// if len(s.Conns) < len(conns) {
+		//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
+		//		log.Infof("Appending new Conn")
+		//		s.Conns = append(s.Conns, conns[i])
+		//		go s.handleConnection(conns[i], true)
+		//	}
+		//}
+		if len(conns) < 2 {
+			continue
+		}
+		for i, conn := range conns {
+			s.Conns = append(s.Conns, conn)
+			log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
+			go s.handleConnection(conn, true)
+
+		}
 	}
 
-	return nil
+	// TODO: Wait for next connection
+	// time.Sleep(100 * time.Second)
+
+	// return nil
 
 	// }
 }
 
-func (s *Server) handleConnection(conn packets.UDPConn) error {
-	s.handleIncomingHandshake(conn)
+func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) error {
+	if waitForHandshake {
+		fmt.Printf("Handling handshake on conn %p\n", conn)
+		s.handleIncomingHandshake(conn)
+	}
 
 	for {
+		// fmt.Printf("Reading on Conn %p\n", conn)
 		msg, err := message.Read(conn)
 		if err != nil {
 			return err
@@ -122,7 +150,7 @@ func (s *Server) handleConnection(conn packets.UDPConn) error {
 		if msg == nil { // keep-alive
 			return nil
 		}
-		// fmt.Println("Got message %d\n", msg.ID)
+		// fmt.Printf("Got message %d\n", msg.ID)
 		switch msg.ID {
 		case message.MsgInterested:
 			retMsg := message.Message{ID: message.MsgUnchoke, Payload: []byte{}}
@@ -149,9 +177,9 @@ func (s *Server) handleConnection(conn packets.UDPConn) error {
 }
 
 func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
-	fmt.Println("Waiting for Handshake message")
+	fmt.Printf("%p: Waiting for Handshake message\n", conn)
 	hs, err := handshake.Read(conn)
-	fmt.Println("Got for Handshake message")
+	fmt.Printf("%p: Got for Handshake message\n", conn)
 	if err != nil {
 		return err
 	}
@@ -160,14 +188,14 @@ func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Sent back Handshake message")
-	fmt.Println("Sending back bitfield")
+	fmt.Printf("%p: Sent back Handshake message\n", conn)
+	fmt.Printf("%p: Sending back bitfield\n", conn)
 	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
 	_, err = conn.Write(msg.Serialize())
 	if err != nil {
 		return err
 	}
-	fmt.Println("Sent back bitfield")
+	fmt.Printf("%p: Sent back bitfield\n", conn)
 
 	return nil
 }

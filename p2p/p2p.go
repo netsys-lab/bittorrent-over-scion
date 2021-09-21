@@ -93,7 +93,7 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 	// TODO: Deadline Methods
 	// c.Conn.SetDeadline(time.Now().Add(30 * time.Second))
 	// defer c.Conn.SetDeadline(time.Time{}) // Disable the deadline
-
+	// log.Printf("Attempting to download piece %d\n", pw.index)
 	for state.downloaded < pw.length {
 		// If unchoked, send requests until we have enough unfulfilled requests
 		if !state.client.Choked {
@@ -103,7 +103,7 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 				if pw.length-state.requested < blockSize {
 					blockSize = pw.length - state.requested
 				}
-
+				// fmt.Printf("%p: Sending request...\n", c.Conn)
 				err := c.SendRequest(pw.index, state.requested, blockSize)
 				if err != nil {
 					return nil, err
@@ -139,38 +139,73 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 		log.Printf("Could not handshake with %s. Disconnecting\n", peer.IP)
 		return
 	}
-	log.Printf("Completed handshake with %s\n", peer.IP)
+	log.Printf("Completed handshake with %s, got %d clients\n", peer.IP, len(clients))
+	time.Sleep(5 * time.Second)
+	for i, c := range clients {
+		if i == len(clients)-1 {
+			// c.SendUnchoke()
+			// c.SendInterested()
+			fmt.Println("Starting Download")
+			for pw := range workQueue {
+				if !c.Bitfield.HasPiece(pw.index) {
+					workQueue <- pw // Put piece back on the queue
+					continue
+				}
 
-	for _, c := range clients {
-		c.SendUnchoke()
-		c.SendInterested()
-		fmt.Println("Starting Download")
-		for pw := range workQueue {
-			if !c.Bitfield.HasPiece(pw.index) {
-				workQueue <- pw // Put piece back on the queue
-				continue
+				// Download the piece
+				// fmt.Printf("Attempting to download piece %d over conn %p\n", pw.index, c.Conn)
+				buf, err := attemptDownloadPiece(c, pw)
+				if err != nil {
+					log.Println("Exiting", err)
+					workQueue <- pw // Put piece back on the queue
+					return
+				}
+
+				// fmt.Println(buf[:128])
+				/*err = checkIntegrity(pw, buf)
+				if err != nil {
+					log.Fatalf("Piece #%d failed integrity check\n", pw.index)
+					workQueue <- pw // Put piece back on the queue
+					continue
+				}*/
+
+				c.SendHave(pw.index)
+				results <- &pieceResult{pw.index, buf}
 			}
+		} else {
+			go func(c *client.Client) {
+				// c.SendUnchoke()
+				// c.SendInterested()
+				fmt.Println("Starting Download")
+				for pw := range workQueue {
+					if !c.Bitfield.HasPiece(pw.index) {
+						workQueue <- pw // Put piece back on the queue
+						continue
+					}
 
-			// Download the piece
-			// fmt.Printf("Attempting to download piece %d\n", pw.index)
-			buf, err := attemptDownloadPiece(c, pw)
-			if err != nil {
-				log.Println("Exiting", err)
-				workQueue <- pw // Put piece back on the queue
-				return
-			}
+					// Download the piece
+					// fmt.Printf("Attempting1 to download piece %d over conn %p\n", pw.index, c.Conn)
+					buf, err := attemptDownloadPiece(c, pw)
+					if err != nil {
+						log.Println("Exiting", err)
+						workQueue <- pw // Put piece back on the queue
+						return
+					}
 
-			// fmt.Println(buf[:128])
-			/*err = checkIntegrity(pw, buf)
-			if err != nil {
-				log.Fatalf("Piece #%d failed integrity check\n", pw.index)
-				workQueue <- pw // Put piece back on the queue
-				continue
-			}*/
+					// fmt.Println(buf[:128])
+					/*err = checkIntegrity(pw, buf)
+					if err != nil {
+						log.Fatalf("Piece #%d failed integrity check\n", pw.index)
+						workQueue <- pw // Put piece back on the queue
+						continue
+					}*/
 
-			c.SendHave(pw.index)
-			results <- &pieceResult{pw.index, buf}
+					c.SendHave(pw.index)
+					results <- &pieceResult{pw.index, buf}
+				}
+			}(c)
 		}
+
 	}
 	/*c, err := client.New(peer, t.PeerID, t.InfoHash)
 	if err != nil {

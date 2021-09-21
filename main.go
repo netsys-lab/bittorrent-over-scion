@@ -3,21 +3,24 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strconv"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/veggiedefender/torrent-client/server"
 	"github.com/veggiedefender/torrent-client/torrentfile"
 )
 
 func main() {
+	log.SetLevel(log.DebugLevel)
 	inPath := os.Args[1]
 	outPath := os.Args[2]
 	peer := os.Args[3]
 	seed := os.Args[4]
 	file := os.Args[5]
 	numCons := os.Args[6]
+	local := os.Args[7]
 	nCons, err := strconv.Atoi(numCons)
 	if err != nil {
 		log.Fatal(err)
@@ -75,7 +78,7 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		err = tf.DownloadToFile(outPath, peer, nCons)
+		err = tf.DownloadToFile(outPath, peer, nCons, local)
 		if err != nil {
 			log.Fatal(err)
 		}

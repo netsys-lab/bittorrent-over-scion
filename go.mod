@@ -19,6 +19,7 @@ require (
 	github.com/pelletier/go-toml v1.9.3 // indirect
 	github.com/prometheus/common v0.29.0 // indirect
 	github.com/scionproto/scion v0.6.0
+	github.com/sirupsen/logrus v1.6.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/uber/jaeger-client-go v2.29.1+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
@@ -33,4 +34,6 @@ require (
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
 
-replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps
+// replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps
+
+replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/martenwallewein/scion-path-discovery

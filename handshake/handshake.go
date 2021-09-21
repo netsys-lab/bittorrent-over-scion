@@ -71,5 +71,7 @@ func Read(r io.Reader) (*Handshake, error) {
 		PeerID:   peerID,
 	}
 
+	fmt.Println(h)
+
 	return &h, nil
 }
