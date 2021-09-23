@@ -98,7 +98,10 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 
 	sel := ClientSelection{}
 	log.Warnf("Dialing from %s to %s", local, address)
-	mpSock := smp.NewMPPeerSock(local, address)
+	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
+		Transport:                   "QUIC",
+		PathSelectionResponsibility: "CLIENT", // TODO: Server
+	})
 	err = mpSock.Listen()
 
 	if err != nil {

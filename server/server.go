@@ -76,7 +76,10 @@ func (s *Server) ListenHandshake() error {
 	// for {
 	// Listen for an incoming connection.
 	// conn, err := sock.Accept()
-	sock := smp.NewMPPeerSock(s.lAddr, nil)
+	sock := smp.NewMPPeerSock(s.lAddr, nil, &smp.MPSocketOptions{
+		Transport:                   "QUIC",
+		PathSelectionResponsibility: "CLIENT", // TODO: Change to server
+	})
 	err = sock.Listen()
 	// s.listener, err = sock.Listen(s.localAddr.String())
 	if err != nil {
