@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"time"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -38,7 +39,7 @@ type ServerSelection struct {
 
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	return pathSet.GetPathSmallHopCount(2), nil
+	return pathSet.GetPathSmallHopCount(4), nil
 }
 
 func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile) (*Server, error) {
@@ -76,7 +77,7 @@ func (s *Server) ListenHandshake() error {
 	// for {
 	// Listen for an incoming connection.
 	// conn, err := sock.Accept()
-	sock := smp.NewMPPeerSock(s.lAddr, nil, &smp.MPSocketOptions{
+	/*sock := smp.NewMPPeerSock(s.lAddr, nil, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
 		PathSelectionResponsibility: "CLIENT", // TODO: Change to server
 	})
@@ -93,6 +94,94 @@ func (s *Server) ListenHandshake() error {
 	}
 
 	sock.SetPeer(remote)
+	*/
+
+	mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
+		Transport: "QUIC",
+	})
+
+	err = mpListener.Listen()
+	if err != nil {
+		return err
+	}
+
+	log.Errorf("MPListener Started")
+
+	startPort := 44000 // TODO: Configure
+	for {
+		remote, err := mpListener.WaitForMPPeerSockConnect()
+		if err != nil {
+			return err
+		}
+		log.Errorf("Handing connection, dialing back")
+		go func(remote *snet.UDPAddr, startPort int) {
+			// TODO: Replace port in address
+			// TODO: Logging
+			ladr := s.localAddr.Copy()
+			ladr.Host.Port = startPort
+			startPort++
+			mpSock := smp.NewMPPeerSock(ladr.String(), remote, &smp.MPSocketOptions{
+				Transport:                   "QUIC",
+				PathSelectionResponsibility: "CLIENT",
+			})
+			err = mpSock.Listen()
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			time.Sleep(2 * time.Second)
+
+			err = mpSock.Connect(&ServerSelection{}, nil)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+
+			// conns := mpSock.UnderlaySocket.GetConnections()
+
+			conns := mpSock.UnderlaySocket.GetConnections()
+			log.Infof("Got new connections %d", len(conns))
+			// if len(s.Conns) < len(conns) {
+			//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
+			//		log.Infof("Appending new Conn")
+			//		s.Conns = append(s.Conns, conns[i])
+			//		go s.handleConnection(conns[i], true)
+			//	}
+			//}
+			for i, conn := range conns {
+				if i == 0 {
+					log.Debugf("Skip incoming connection")
+					continue
+				}
+				s.Conns = append(s.Conns, conn)
+				log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
+				go s.handleConnection(conn, true)
+
+			}
+			for {
+				conns := <-mpSock.OnConnectionsChange
+				log.Infof("Got new connections %d", len(conns))
+				// if len(s.Conns) < len(conns) {
+				//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
+				//		log.Infof("Appending new Conn")
+				//		s.Conns = append(s.Conns, conns[i])
+				//		go s.handleConnection(conns[i], true)
+				//	}
+				//}
+				if len(conns) < 2 {
+					continue
+				}
+				for i, conn := range conns {
+					s.Conns = append(s.Conns, conn)
+					log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
+					go s.handleConnection(conn, true)
+
+				}
+			}
+
+		}(remote, startPort)
+
+	}
 
 	// TODO: Remove public fields
 	// connections := sock.UnderlaySocket.GetConnections()
@@ -107,7 +196,7 @@ func (s *Server) ListenHandshake() error {
 		s.Conns = append(s.Conns, conn)
 		log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
 		go s.handleConnection(conn, true)
-	}*/
+	}
 	for {
 		conns := <-sock.OnConnectionsChange
 		log.Infof("Got new connections %d", len(conns))
@@ -127,7 +216,7 @@ func (s *Server) ListenHandshake() error {
 			go s.handleConnection(conn, true)
 
 		}
-	}
+	}*/
 
 	// TODO: Wait for next connection
 	// time.Sleep(100 * time.Second)

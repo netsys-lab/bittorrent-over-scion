@@ -36,7 +36,8 @@ type ClientSelection struct {
 
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ClientSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	return pathSet.GetPathSmallHopCount(2), nil
+	// Connect via shortest path
+	return pathSet.GetPathSmallHopCount(1), nil
 }
 
 func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handshake.Handshake, error) {
@@ -108,18 +109,28 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 		return nil, err
 	}
 
-	err = mpSock.Connect(&sel, nil)
+	// Connect via one path
+	err = mpSock.Connect(&sel, &smp.ConnectOptions{
+		DontWaitForIncoming: true,
+		SendAddrPacket:      true,
+	})
 
 	if err != nil {
 		return nil, err
 	}
+	// Wait for incoming connections
+	_, err = mpSock.WaitForPeerConnect(nil)
 
+	if err != nil {
+		return nil, err
+	}
 	clients := make([]*Client, 0)
 	var bf bitfield.Bitfield
-	log.Warnf("Having %d CONNECTIONS", len(mpSock.UnderlaySocket.GetConnections()))
+	conLen := len(mpSock.UnderlaySocket.GetConnections())
+	log.Warnf("Having %d CONNECTIONS", conLen)
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
-		if i == 0 {
+		if i == conLen-1 {
 			continue
 		}
 
