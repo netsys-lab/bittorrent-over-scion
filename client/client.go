@@ -8,6 +8,7 @@ import (
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
+	"github.com/netsys-lab/scion-path-discovery/socket"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 
@@ -102,6 +103,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
+		MultiportMode:               true,
 	})
 	err = mpSock.Listen()
 
@@ -110,7 +112,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	}
 
 	// Connect via one path
-	err = mpSock.Connect(&sel, &smp.ConnectOptions{
+	err = mpSock.Connect(&sel, &socket.ConnectOptions{
 		DontWaitForIncoming: true,
 		SendAddrPacket:      true,
 	})
@@ -118,6 +120,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	if err != nil {
 		return nil, err
 	}
+
 	// Wait for incoming connections
 	_, err = mpSock.WaitForPeerConnect(nil)
 

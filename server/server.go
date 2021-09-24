@@ -9,6 +9,7 @@ import (
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
+	"github.com/netsys-lab/scion-path-discovery/socket"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/scionproto/scion/go/lib/snet"
@@ -114,6 +115,7 @@ func (s *Server) ListenHandshake() error {
 			return err
 		}
 		log.Errorf("Handing connection, dialing back")
+		time.Sleep(2 * time.Second)
 		go func(remote *snet.UDPAddr, startPort int) {
 			// TODO: Replace port in address
 			// TODO: Logging
@@ -123,15 +125,19 @@ func (s *Server) ListenHandshake() error {
 			mpSock := smp.NewMPPeerSock(ladr.String(), remote, &smp.MPSocketOptions{
 				Transport:                   "QUIC",
 				PathSelectionResponsibility: "CLIENT",
+				MultiportMode:               true,
 			})
 			err = mpSock.Listen()
 			if err != nil {
 				log.Error(err)
 				return
 			}
-			time.Sleep(2 * time.Second)
+			// time.Sleep(2 * time.Second)
 
-			err = mpSock.Connect(&ServerSelection{}, nil)
+			err = mpSock.Connect(&ServerSelection{}, &socket.ConnectOptions{
+				SendAddrPacket:      true,
+				DontWaitForIncoming: true,
+			})
 			if err != nil {
 				log.Error(err)
 				return
