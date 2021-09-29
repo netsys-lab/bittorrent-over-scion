@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"time"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -126,7 +125,7 @@ func (s *Server) ListenHandshake() error {
 			return err
 		}
 		log.Errorf("Handing connection, dialing back")
-		time.Sleep(2 * time.Second)
+		// time.Sleep(2 * time.Second)
 		go func(remote *snet.UDPAddr, startPort int) {
 			// TODO: Replace port in address
 			// TODO: Logging

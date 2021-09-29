@@ -3,7 +3,6 @@ package p2p
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/veggiedefender/torrent-client/client"
 	"github.com/veggiedefender/torrent-client/message"
@@ -147,7 +146,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 		return
 	}
 	log.Printf("Completed handshake with %s, got %d clients\n", peer.IP, len(clients))
-	time.Sleep(5 * time.Second)
+	// time.Sleep(5 * time.Second)
 	for i, c := range clients {
 		if i == len(clients)-1 {
 			// c.SendUnchoke()
@@ -251,7 +250,7 @@ func (t *Torrent) Download() ([]byte, error) {
 
 	// Start workers
 	for _, peer := range t.Peers {
-		time.Sleep(100 * time.Millisecond)
+		// time.Sleep(100 * time.Millisecond)
 		go t.startDownloadWorker(peer, workQueue, results)
 	}
 

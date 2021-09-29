@@ -3,7 +3,6 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"time"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -56,7 +55,7 @@ func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handsh
 	// TODO: Add Deadline Methods
 	// conn.SetDeadline(time.Now().Add(3 * time.Second))
 	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
-	time.Sleep(3 * time.Second)
+	// time.Sleep(3 * time.Second)
 	log.Infof("Starting handshake...")
 	req := handshake.New(infohash, peerID)
 	_, err := conn.Write(req.Serialize())

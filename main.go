@@ -19,7 +19,7 @@ var flags = struct {
 	Local                       string
 	PathSelectionResponsibility string
 }{
-	Seed:                        true,
+	Seed:                        false,
 	PathSelectionResponsibility: "server",
 }
 

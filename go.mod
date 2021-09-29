@@ -12,10 +12,9 @@ require (
 	github.com/lucas-clemente/quic-go v0.21.1
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
-	github.com/netsec-ethz/scion-apps v0.3.0
+	github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f
 	github.com/netsys-lab/scion-path-discovery v0.0.0-20210920082250-82e0785b5f6c
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/pelletier/go-toml v1.9.3 // indirect
 	github.com/prometheus/common v0.29.0 // indirect
 	github.com/scionproto/scion v0.6.0
 	github.com/sirupsen/logrus v1.6.0
