@@ -24,7 +24,7 @@ var flags = struct {
 }
 
 func main() {
-	log.SetLevel(log.InfoLevel)
+	log.SetLevel(log.DebugLevel)
 	tagflag.Parse(&flags)
 
 	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)

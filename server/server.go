@@ -117,32 +117,35 @@ func (s *Server) ListenHandshake() error {
 
 	// log.Errorf("MPListener Started")
 
-	startPort := 44000 // TODO: Configure
+	startPort := 45000 // TODO: Configure
 	for {
 		remote, err := mpListener.WaitForMPPeerSockConnect()
 		if err != nil {
 			return err
 		}
 		// log.Errorf("Handing connection, dialing back")
+		log.Infof("Got new Client, dialing back")
+		startPort += 1000
 		// time.Sleep(2 * time.Second)
 		go func(remote *snet.UDPAddr, startPort int) {
 			// TODO: Replace port in address
 			// TODO: Logging
 			ladr := s.localAddr.Copy()
 			ladr.Host.Port = startPort
-			startPort++
 			mpSock := smp.NewMPPeerSock(ladr.String(), remote, &smp.MPSocketOptions{
 				Transport:                   "QUIC",
 				PathSelectionResponsibility: "CLIENT",
 				MultiportMode:               true,
 			})
+			log.Debugf("New Server listening on %s", ladr.String())
 			err = mpSock.Listen()
 			if err != nil {
-				log.Error(err)
+
+				log.Errorf("Failed to listen %v", err)
 				return
 			}
 			// time.Sleep(2 * time.Second)
-
+			log.Debugf("Connecting to %s", remote.String())
 			err = mpSock.Connect(&ServerSelection{}, &socket.ConnectOptions{
 				SendAddrPacket:      true,
 				DontWaitForIncoming: true,
