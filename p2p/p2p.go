@@ -2,7 +2,8 @@ package p2p
 
 import (
 	"fmt"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/veggiedefender/torrent-client/client"
 	"github.com/veggiedefender/torrent-client/message"
@@ -141,17 +142,17 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 		clients, err = mpC.Dial(t.Local, peer, t.PeerID, t.InfoHash)
 	}
 	if err != nil {
-		fmt.Println(err)
-		log.Printf("Could not handshake with %s. Disconnecting\n", peer.IP)
+		log.Error(err)
+		log.Errorf("Could not handshake with %s. Disconnecting\n", peer.IP)
 		return
 	}
-	log.Printf("Completed handshake with %s, got %d clients\n", peer.IP, len(clients))
+	log.Infof("Completed handshake with %s, got %d clients\n", peer.IP, len(clients))
 	// time.Sleep(5 * time.Second)
 	for i, c := range clients {
 		if i == len(clients)-1 {
 			// c.SendUnchoke()
 			// c.SendInterested()
-			fmt.Println("Starting Download")
+			log.Println("Starting Download")
 			for pw := range workQueue {
 				if !c.Bitfield.HasPiece(pw.index) {
 					workQueue <- pw // Put piece back on the queue
@@ -182,7 +183,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 			go func(c *client.Client) {
 				// c.SendUnchoke()
 				// c.SendInterested()
-				fmt.Println("Starting Download")
+				log.Println("Starting Download")
 				for pw := range workQueue {
 					if !c.Bitfield.HasPiece(pw.index) {
 						workQueue <- pw // Put piece back on the queue

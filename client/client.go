@@ -109,7 +109,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	}
 
 	sel := ClientInitiatedSelection{}
-	log.Warnf("Dialing from %s to %s", local, address)
+	log.Debugf("Dialing from %s to %s", local, address)
 	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
@@ -140,7 +140,6 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	clients := make([]*Client, 0)
 	var bf bitfield.Bitfield
 	conLen := len(mpSock.UnderlaySocket.GetConnections())
-	log.Warnf("Having %d CONNECTIONS", conLen)
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
 		if i == conLen-1 {
@@ -185,7 +184,7 @@ func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byt
 	}
 
 	sel := ClientSelection{}
-	log.Warnf("Dialing from %s to %s", local, address)
+	log.Debugf("Dialing from %s to %s", local, address)
 	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
@@ -209,8 +208,7 @@ func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byt
 
 	clients := make([]*Client, 0)
 	var bf bitfield.Bitfield
-	conLen := len(mpSock.UnderlaySocket.GetConnections())
-	log.Warnf("Having %d CONNECTIONS", conLen)
+	// conLen := len(mpSock.UnderlaySocket.GetConnections())
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
 		if i == 0 {
