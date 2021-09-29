@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.0 // indirect
+	github.com/anacrolix/tagflag v1.3.0
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/inconshreveable/log15 v0.0.0-20201112154412-8562bdadbbac // indirect
@@ -32,6 +33,8 @@ require (
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
 
-replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps
+// replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps
 
-replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/martenwallewein/scion-path-discovery
+replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/netsys-lab/scion-path-discovery
+
+// replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps
