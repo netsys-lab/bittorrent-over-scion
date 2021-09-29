@@ -40,7 +40,7 @@ type bencodeTorrent struct {
 }
 
 // DownloadToFile downloads a torrent and writes it to a file
-func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int, local string) error {
+func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pathSelectionResponsibility string) error {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
@@ -51,18 +51,15 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int, loca
 	if peer != "" {
 		i := 0
 		pAddr, _ := snet.ParseUDPAddr(peer)
-		targetPeers = make([]peers.Peer, numCons)
-		for i < numCons {
-			// pAddr, _ := net.ResolveTCPAddr("tcp", peer)
+		// pAddr, _ := net.ResolveTCPAddr("tcp", peer)
 
-			targetPeers[i] = peers.Peer{
-				IP:    pAddr.Host.IP,
-				Port:  uint16(pAddr.Host.Port),
-				Addr:  fmt.Sprintf("%s:%d", peer, 42423+i),
-				Index: i,
-			}
-			i++
+		p := peers.Peer{
+			IP:    pAddr.Host.IP,
+			Port:  uint16(pAddr.Host.Port),
+			Addr:  peer,
+			Index: i,
 		}
+		targetPeers = append(targetPeers, p)
 
 	} else {
 		targetPeers, err = t.requestPeers(peerID, Port)
@@ -72,14 +69,15 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, numCons int, loca
 	}
 
 	torrent := p2p.Torrent{
-		Peers:       targetPeers,
-		PeerID:      peerID,
-		InfoHash:    t.InfoHash,
-		PieceHashes: t.PieceHashes,
-		PieceLength: t.PieceLength,
-		Length:      t.Length,
-		Name:        t.Name,
-		Local:       local,
+		Peers:                       targetPeers,
+		PeerID:                      peerID,
+		InfoHash:                    t.InfoHash,
+		PieceHashes:                 t.PieceHashes,
+		PieceLength:                 t.PieceLength,
+		Length:                      t.Length,
+		Name:                        t.Name,
+		Local:                       local,
+		PathSelectionResponsibility: pathSelectionResponsibility,
 	}
 	buf, err := torrent.Download()
 	if err != nil {

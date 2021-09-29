@@ -38,6 +38,17 @@ type ClientSelection struct {
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ClientSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
 	// Connect via shortest path
+	return pathSet.GetPathSmallHopCount(3), nil
+}
+
+//LastSelection users could add more fields
+type ClientInitiatedSelection struct {
+	lastSelectedPathSet pathselection.PathSet
+}
+
+//CustomPathSelectAlg this is where the user actually wants to implement its logic in
+func (lastSel *ClientInitiatedSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
+	// Connect via shortest path
 	return pathSet.GetPathSmallHopCount(1), nil
 }
 
@@ -98,7 +109,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 		return nil, err
 	}
 
-	sel := ClientSelection{}
+	sel := ClientInitiatedSelection{}
 	log.Warnf("Dialing from %s to %s", local, address)
 	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
@@ -134,6 +145,76 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
 		if i == conLen-1 {
+			continue
+		}
+
+		// Handshake only over first conn
+		// TODO: Make this more flexible and don't stop all on error
+
+		// if i == 1 {
+		_, err = completeHandshake(v, infoHash, peerID)
+		if err != nil {
+			mpSock.UnderlaySocket.CloseAll()
+			return nil, err
+		}
+
+		fmt.Printf("Completed handshake over conn %p\n", v)
+		bf, err = recvBitfield(v)
+		if err != nil {
+			mpSock.UnderlaySocket.CloseAll()
+			return nil, err
+		}
+		// }
+		c := Client{
+			peer:     peer,
+			peerID:   peerID,
+			Conn:     v,
+			infoHash: infoHash,
+			Choked:   false,
+			Bitfield: bf,
+		}
+		clients = append(clients, &c)
+	}
+
+	return clients, nil
+}
+
+func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byte) ([]*Client, error) {
+	address, err := snet.ParseUDPAddr(peer.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	sel := ClientSelection{}
+	log.Warnf("Dialing from %s to %s", local, address)
+	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
+		Transport:                   "QUIC",
+		PathSelectionResponsibility: "CLIENT", // TODO: Server
+		MultiportMode:               true,
+	})
+	err = mpSock.Listen()
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Connect via one path
+	err = mpSock.Connect(&sel, &socket.ConnectOptions{
+		DontWaitForIncoming: false,
+		SendAddrPacket:      true,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	clients := make([]*Client, 0)
+	var bf bitfield.Bitfield
+	conLen := len(mpSock.UnderlaySocket.GetConnections())
+	log.Warnf("Having %d CONNECTIONS", conLen)
+	for i, v := range mpSock.UnderlaySocket.GetConnections() {
+
+		if i == 0 {
 			continue
 		}
 

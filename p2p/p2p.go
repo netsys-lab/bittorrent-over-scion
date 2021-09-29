@@ -18,14 +18,15 @@ const MaxBacklog = 5
 
 // Torrent holds data required to download a torrent from a list of peers
 type Torrent struct {
-	Peers       []peers.Peer
-	PeerID      [20]byte
-	InfoHash    [20]byte
-	PieceHashes [][20]byte
-	PieceLength int
-	Length      int
-	Name        string
-	Local       string
+	Peers                       []peers.Peer
+	PeerID                      [20]byte
+	InfoHash                    [20]byte
+	PieceHashes                 [][20]byte
+	PieceLength                 int
+	Length                      int
+	Name                        string
+	Local                       string
+	PathSelectionResponsibility string
 }
 
 type pieceWork struct {
@@ -133,7 +134,13 @@ func checkIntegrity(pw *pieceWork, buf []byte) error {
 
 func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork, results chan *pieceResult) {
 	mpC := client.NewMPClient()
-	clients, err := mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash)
+	var clients []*client.Client
+	var err error
+	if t.PathSelectionResponsibility == "server" {
+		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash)
+	} else {
+		clients, err = mpC.Dial(t.Local, peer, t.PeerID, t.InfoHash)
+	}
 	if err != nil {
 		fmt.Println(err)
 		log.Printf("Could not handshake with %s. Disconnecting\n", peer.IP)

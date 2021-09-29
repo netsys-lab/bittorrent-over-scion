@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -43,12 +44,22 @@ func (lastSel *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathS
 	return pathSet.GetPathSmallHopCount(4), nil
 }
 
-func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile) (*Server, error) {
+func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string) (*Server, error) {
 	// localAddr, err := net.ResolveTCPAddr("tcp", lAddr)
 	//if err != nil {
 	//	return nil, err
 	//}
-	localAddr, _ := snet.ParseUDPAddr(lAddr)
+
+	// TODO: Maybe there is an efficient way to do this, but for Bittorrent its not that useful...
+	if pathSelectionResponsibility == "client" {
+		return nil, errors.New("client based pathselection not supported yet")
+	}
+
+	localAddr, err := snet.ParseUDPAddr(lAddr)
+	if err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		peers:       make([]peers.Peer, 0),
 		Conns:       make([]packets.UDPConn, 0),

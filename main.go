@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 
 	log "github.com/sirupsen/logrus"
@@ -12,74 +11,53 @@ import (
 )
 
 var flags = struct {
-	InPath  string
-	OutPath string
-	Peer    string
-	Seed    bool
-	File    string
-	Local   string
-	numCons int
+	InPath                      string
+	OutPath                     string
+	Peer                        string
+	Seed                        bool
+	File                        string
+	Local                       string
+	PathSelectionResponsibility string
 }{
-	Seed: true,
+	Seed:                        true,
+	PathSelectionResponsibility: "server",
 }
 
 func main() {
 	log.SetLevel(log.DebugLevel)
 	tagflag.Parse(&flags)
 
-	fmt.Printf("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
+	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 	tf, err := torrentfile.Open(flags.InPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if flags.Seed {
-		fmt.Println("Loading file to RAM")
+		log.Info("Loading file to RAM")
 		tf.Content, err = ioutil.ReadFile(flags.File)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println("Loaded file to RAM")
-		i := 0
-		startPort := 42423
-		for i < flags.numCons {
-			if i < flags.numCons-1 {
-				go func(port int) {
-					peer := fmt.Sprintf("%s:%d", flags.Peer, port)
-					server, err := server.NewServer(peer, &tf)
-					if err != nil {
-						log.Fatal(err)
-					}
+		log.Info("Loaded file to RAM")
+		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
+		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-					fmt.Println("Created Server")
+		log.Info("Created Server")
 
-					err = server.ListenHandshake()
-					if err != nil {
-						log.Fatal(err)
-					}
-				}(startPort + i)
-			} else {
-				peer := fmt.Sprintf("%s:%d", flags.Peer, startPort+i)
-				server, err := server.NewServer(peer, &tf)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				fmt.Println("Created Server")
-
-				err = server.ListenHandshake()
-				if err != nil {
-					log.Fatal(err)
-				}
-			}
-			i++
+		err = server.ListenHandshake()
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		err = tf.DownloadToFile(flags.OutPath, flags.Peer, flags.numCons, flags.Local)
+		err = tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility)
 		if err != nil {
 			log.Fatal(err)
 		}
