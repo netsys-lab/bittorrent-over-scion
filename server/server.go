@@ -39,7 +39,8 @@ type ServerSelection struct {
 
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	return pathSet.GetPathSmallHopCount(4), nil
+	ps := pathSet.GetPathSmallHopCount(4)
+	return ps, nil
 }
 
 func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string) (*Server, error) {
@@ -177,6 +178,7 @@ func (s *Server) ListenHandshake() error {
 
 			}
 			for {
+				// TODO: Filter for new connections
 				conns := <-mpSock.OnConnectionsChange
 				log.Debugf("Got new connections %d", len(conns))
 				// if len(s.Conns) < len(conns) {
@@ -186,7 +188,7 @@ func (s *Server) ListenHandshake() error {
 				//		go s.handleConnection(conns[i], true)
 				//	}
 				//}
-				if len(conns) < 2 {
+				/*if len(conns) < 2 {
 					continue
 				}
 				for i, conn := range conns {
@@ -194,7 +196,7 @@ func (s *Server) ListenHandshake() error {
 					log.Debugf("Starting reading on conn %d with handshake %d", i, i == 0)
 					go s.handleConnection(conn, true)
 
-				}
+				}*/
 			}
 
 		}(remote, startPort)
