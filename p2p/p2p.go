@@ -104,7 +104,6 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 				if pw.length-state.requested < blockSize {
 					blockSize = pw.length - state.requested
 				}
-				// fmt.Printf("%p: Sending request...\n", c.Conn)
 				err := c.SendRequest(pw.index, state.requested, blockSize)
 				if err != nil {
 					return nil, err
@@ -138,14 +137,86 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 	var err error
 	if t.PathSelectionResponsibility == "server" {
 		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash)
+		if err != nil {
+			log.Error(err)
+			log.Errorf("Could not handshake with %s. Disconnecting\n", peer.IP)
+			return
+		}
+		go func() {
+			sock := mpC.GetSocket()
+			for {
+				conns := <-sock.OnConnectionsChange
+				log.Debugf("Got new connections %d", len(conns))
+				for i, v := range conns {
+
+					if i == len(conns)-1 { // dial conn
+						continue
+					}
+
+					log.Infof("Checking conn with id %s", v.GetId())
+
+					connAlreadyOpen := false
+					for _, cl := range clients {
+						if cl.Conn.GetId() == v.GetId() {
+							connAlreadyOpen = true
+							log.Debugf("Got already open conn for id %s", v.GetId())
+							log.Infof("Skipping conn %p", v)
+							break
+						}
+					}
+
+					if !connAlreadyOpen {
+
+						c := client.Client{
+							Conn:     v,
+							Choked:   false,
+							Bitfield: clients[0].Bitfield,
+							Peer:     clients[0].Peer,
+							InfoHash: clients[0].InfoHash,
+							PeerID:   clients[0].PeerID,
+						}
+						clients = append(clients, &c)
+						go func(c *client.Client) {
+							// c.SendUnchoke()
+							// c.SendInterested()
+							// fmt.Println(*c)
+							log.Infof("Using conn %p", c.Conn)
+							log.Println("Starting Download from new client")
+							// c.Conn.Write(make([]byte, 1200))
+							c.Handshake()
+							for pw := range workQueue {
+								if !c.Bitfield.HasPiece(pw.index) {
+									workQueue <- pw // Put piece back on the queue
+									continue
+								}
+
+								// Download the piece
+								// fmt.Printf("Attempting1 to download piece %d over conn %p\n", pw.index, c.Conn)
+								buf, err := attemptDownloadPiece(c, pw)
+								if err != nil {
+									log.Println("Exiting", err)
+									workQueue <- pw // Put piece back on the queue
+									return
+								}
+
+								c.SendHave(pw.index)
+								results <- &pieceResult{pw.index, buf}
+							}
+						}(&c)
+					}
+				}
+
+			}
+		}()
 	} else {
 		clients, err = mpC.Dial(t.Local, peer, t.PeerID, t.InfoHash)
+		if err != nil {
+			log.Error(err)
+			log.Errorf("Could not handshake with %s. Disconnecting\n", peer.IP)
+			return
+		}
 	}
-	if err != nil {
-		log.Error(err)
-		log.Errorf("Could not handshake with %s. Disconnecting\n", peer.IP)
-		return
-	}
+
 	log.Infof("Completed handshake with %s, got %d clients\n", peer.IP, len(clients))
 	// time.Sleep(5 * time.Second)
 	for i, c := range clients {

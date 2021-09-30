@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
@@ -35,11 +36,16 @@ type Server struct {
 //LastSelection users could add more fields
 type ServerSelection struct {
 	lastSelectedPathSet pathselection.PathSet
+	numPaths            int
 }
 
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	ps := pathSet.GetPathSmallHopCount(4)
+	ps := pathSet.GetPathSmallHopCount(lastSel.numPaths + 1)
+	lastSel.numPaths++
+	if lastSel.numPaths > 4 {
+		lastSel.numPaths = 4
+	}
 	return ps, nil
 }
 
@@ -181,6 +187,22 @@ func (s *Server) ListenHandshake() error {
 				// TODO: Filter for new connections
 				conns := <-mpSock.OnConnectionsChange
 				log.Debugf("Got new connections %d", len(conns))
+				for i, conn := range conns {
+					connAlreadyOpen := false
+					for _, oldConn := range s.Conns {
+						if oldConn.GetId() == conn.GetId() {
+							connAlreadyOpen = true
+							log.Debugf("Got already open conn for id %s", conn.GetId())
+						}
+					}
+					if !connAlreadyOpen {
+						s.Conns = append(s.Conns, conn)
+						log.Debugf("Starting reading on conn %p with handshake %d", conn, i == 0)
+						log.Debugf(conn.LocalAddr().String())
+						go s.handleConnection(conn, true)
+					}
+
+				}
 				// if len(s.Conns) < len(conns) {
 				//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
 				//		log.Infof("Appending new Conn")
@@ -250,6 +272,13 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 	if waitForHandshake {
 		// fmt.Printf("Handling handshake on conn %p\n", conn)
 		s.handleIncomingHandshake(conn)
+	} else {
+		buf := make([]byte, 1200)
+		n, err := conn.Read(buf)
+		if err != nil {
+			return err
+		}
+		log.Infof("Read buf %d", n)
 	}
 
 	for {
@@ -262,7 +291,10 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 		if msg == nil { // keep-alive
 			return nil
 		}
-		// fmt.Printf("Got message %d\n", msg.ID)
+		if !waitForHandshake {
+			fmt.Printf("Got message %d\n", msg.ID)
+		}
+		//
 		switch msg.ID {
 		case message.MsgInterested:
 			retMsg := message.Message{ID: message.MsgUnchoke, Payload: []byte{}}
@@ -273,7 +305,10 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			// fmt.Println("Sent back unChoke")
 		case message.MsgRequest:
 			index, begin, length := message.ParseRequest(msg)
-			// fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
+			if !waitForHandshake {
+				fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
+			}
+			//
 			buf := make([]byte, 8)
 			binary.BigEndian.PutUint32(buf[0:4], uint32(index))
 			binary.BigEndian.PutUint32(buf[4:8], uint32(begin))
@@ -289,9 +324,9 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 }
 
 func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
-	// fmt.Printf("%p: Waiting for Handshake message\n", conn)
+	fmt.Printf("%p: Waiting for Handshake message\n", conn)
 	hs, err := handshake.Read(conn)
-	// fmt.Printf("%p: Got for Handshake message\n", conn)
+	fmt.Printf("%p: Got for Handshake message\n", conn)
 	if err != nil {
 		return err
 	}

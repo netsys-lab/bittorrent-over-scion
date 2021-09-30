@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -24,9 +25,9 @@ type Client struct {
 	Conn     packets.UDPConn
 	Choked   bool
 	Bitfield bitfield.Bitfield
-	peer     peers.Peer
-	infoHash [20]byte
-	peerID   [20]byte
+	Peer     peers.Peer
+	InfoHash [20]byte
+	PeerID   [20]byte
 }
 
 //LastSelection users could add more fields
@@ -56,9 +57,12 @@ func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handsh
 	// conn.SetDeadline(time.Now().Add(3 * time.Second))
 	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
 	// time.Sleep(3 * time.Second)
-	log.Infof("Starting handshake...")
+	log.Infof("Starting handshake with remote %s...", conn.GetRemote())
 	req := handshake.New(infohash, peerID)
+	time.Sleep(1 * time.Second)
 	_, err := conn.Write(req.Serialize())
+
+	log.Infof("Wrote packet")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -96,10 +100,16 @@ func recvBitfield(conn packets.UDPConn) (bitfield.Bitfield, error) {
 }
 
 type MPClient struct {
+	Client
+	mpSock *smp.MPPeerSock
 }
 
 func NewMPClient() *MPClient {
 	return &MPClient{}
+}
+
+func (mp *MPClient) GetSocket() *smp.MPPeerSock {
+	return mp.mpSock
 }
 
 func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, peerID, infoHash [20]byte) ([]*Client, error) {
@@ -115,6 +125,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
 		MultiportMode:               true,
 	})
+	mp.mpSock = mpSock
 	err = mpSock.Listen()
 
 	if err != nil {
@@ -123,8 +134,9 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 
 	// Connect via one path
 	err = mpSock.Connect(&sel, &socket.ConnectOptions{
-		DontWaitForIncoming: true,
-		SendAddrPacket:      true,
+		DontWaitForIncoming:     true,
+		SendAddrPacket:          true,
+		NoPeriodicPathSelection: true,
 	})
 
 	if err != nil {
@@ -142,6 +154,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	conLen := len(mpSock.UnderlaySocket.GetConnections())
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
+		// TODO: What about this one?
 		if i == conLen-1 {
 			continue
 		}
@@ -164,17 +177,54 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 		}
 		// }
 		c := Client{
-			peer:     peer,
-			peerID:   peerID,
+			Peer:     peer,
+			PeerID:   peerID,
 			Conn:     v,
-			infoHash: infoHash,
+			InfoHash: infoHash,
 			Choked:   false,
 			Bitfield: bf,
 		}
 		clients = append(clients, &c)
 	}
 
+	mp.InfoHash = infoHash
+	mp.Peer = peer
+	mp.PeerID = peerID
+	mp.Bitfield = bf
+
 	return clients, nil
+}
+
+func (c *Client) Handshake() error {
+	_, err := completeHandshake(c.Conn, c.InfoHash, c.PeerID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Completed handshake over conn %p\n", c.Conn)
+	c.Bitfield, err = recvBitfield(c.Conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mp *MPClient) WaitForNewClient() (*Client, error) {
+
+	conn, err := mp.mpSock.UnderlaySocket.WaitForIncomingConn()
+	if err != nil {
+		return nil, err
+	}
+	c := Client{
+		Peer:     mp.Peer,
+		PeerID:   mp.PeerID,
+		Conn:     conn,
+		InfoHash: mp.InfoHash,
+		Choked:   false,
+		Bitfield: mp.Bitfield,
+	}
+	return &c, nil
 }
 
 func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byte) ([]*Client, error) {
@@ -190,6 +240,7 @@ func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byt
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
 		MultiportMode:               true,
 	})
+	mp.mpSock = mpSock
 	err = mpSock.Listen()
 
 	if err != nil {
@@ -233,15 +284,20 @@ func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byt
 		}
 		// }
 		c := Client{
-			peer:     peer,
-			peerID:   peerID,
+			Peer:     peer,
+			PeerID:   peerID,
 			Conn:     v,
-			infoHash: infoHash,
+			InfoHash: infoHash,
 			Choked:   false,
 			Bitfield: bf,
 		}
 		clients = append(clients, &c)
 	}
+
+	mp.InfoHash = infoHash
+	mp.Peer = peer
+	mp.PeerID = peerID
+	mp.Bitfield = bf
 
 	return clients, nil
 }
