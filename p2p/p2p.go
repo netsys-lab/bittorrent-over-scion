@@ -8,9 +8,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/veggiedefender/torrent-client/client"
-	"github.com/veggiedefender/torrent-client/message"
-	"github.com/veggiedefender/torrent-client/peers"
+	"github.com/martenwallewein/torrent-client/client"
+	"github.com/martenwallewein/torrent-client/message"
+	"github.com/martenwallewein/torrent-client/peers"
 )
 
 // MaxBlockSize is the largest number of bytes a request can ask for

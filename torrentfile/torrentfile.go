@@ -10,8 +10,8 @@ import (
 	"github.com/jackpal/bencode-go"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
-	"github.com/veggiedefender/torrent-client/p2p"
-	"github.com/veggiedefender/torrent-client/peers"
+	"github.com/martenwallewein/torrent-client/p2p"
+	"github.com/martenwallewein/torrent-client/peers"
 )
 
 // Port to listen on

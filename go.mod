@@ -1,10 +1,10 @@
-module github.com/veggiedefender/torrent-client
+module github.com/martenwallewein/torrent-client
 
-go 1.13
+go 1.16
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.0 // indirect
-	github.com/anacrolix/tagflag v1.3.0
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/inconshreveable/log15 v0.0.0-20201112154412-8562bdadbbac // indirect

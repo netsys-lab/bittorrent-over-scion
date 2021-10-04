@@ -79,6 +79,7 @@ func (s *SCIONSocket) Listen(addr string) (*net.Listener, error) {
 	l := (*net.Listener)(unsafe.Pointer(s.listener))
 	return l, err
 }
+
 func (s *SCIONSocket) Dial(addr string, index int) (net.Conn, error) {
 
 	if err := InitSQUICCerts(); err != nil {

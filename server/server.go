@@ -6,18 +6,20 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/martenwallewein/torrent-client/bitfield"
+	"github.com/martenwallewein/torrent-client/handshake"
+	"github.com/martenwallewein/torrent-client/message"
+	"github.com/martenwallewein/torrent-client/peers"
+	"github.com/martenwallewein/torrent-client/socket"
+	"github.com/martenwallewein/torrent-client/torrentfile"
+
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/netsys-lab/scion-path-discovery/socket"
-	log "github.com/sirupsen/logrus"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/scionproto/scion/go/lib/snet"
-	"github.com/veggiedefender/torrent-client/bitfield"
-	"github.com/veggiedefender/torrent-client/handshake"
-	"github.com/veggiedefender/torrent-client/message"
-	"github.com/veggiedefender/torrent-client/peers"
-	"github.com/veggiedefender/torrent-client/torrentfile"
 )
 
 // A Client is a TCP connection with a peer
