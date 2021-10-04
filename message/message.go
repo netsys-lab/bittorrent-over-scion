@@ -29,6 +29,8 @@ const (
 	MsgPiece messageID = 7
 	// MsgCancel cancels a request
 	MsgCancel messageID = 8
+	// MsgPort transmit port of dht node
+	MsgPort messageID = 9
 )
 
 // Message stores ID and payload of a message
@@ -59,6 +61,13 @@ func FormatHave(index int) *Message {
 	payload := make([]byte, 4)
 	binary.BigEndian.PutUint32(payload, uint32(index))
 	return &Message{ID: MsgHave, Payload: payload}
+}
+
+// FormatHave creates a HAVE message
+func FormatPort(dhtPort uint16) *Message {
+	payload := make([]byte, 2)
+	binary.BigEndian.PutUint16(payload, dhtPort)
+	return &Message{ID: MsgPort, Payload: payload}
 }
 
 // ParsePiece parses a PIECE message and copies its payload into a buffer
@@ -96,6 +105,17 @@ func ParseHave(msg *Message) (int, error) {
 	}
 	index := int(binary.BigEndian.Uint32(msg.Payload))
 	return index, nil
+}
+
+// ParseHave parses a HAVE message
+func ParsePort(msg *Message) (uint16, error) {
+	if msg.ID != MsgPort {
+		return 0, fmt.Errorf("Expected HAVE (ID %d), got ID %d", MsgPort, msg.ID)
+	}
+	if len(msg.Payload) != 2 {
+		return 0, fmt.Errorf("Expected payload length 2, got length %d", len(msg.Payload))
+	}
+	return binary.BigEndian.Uint16(msg.Payload), nil
 }
 
 // Serialize serializes a message into a buffer of the form
@@ -167,6 +187,8 @@ func (m *Message) name() string {
 		return "Piece"
 	case MsgCancel:
 		return "Cancel"
+	case MsgPort:
+		return "Ping"
 	default:
 		return fmt.Sprintf("Unknown#%d", m.ID)
 	}

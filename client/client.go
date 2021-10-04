@@ -3,13 +3,14 @@ package client
 import (
 	"bytes"
 	"fmt"
+	"github.com/martenwallewein/torrent-client/config"
+	"github.com/martenwallewein/torrent-client/dht_node"
 	"time"
 
 	"github.com/martenwallewein/torrent-client/bitfield"
-	"github.com/martenwallewein/torrent-client/peers"
-	"github.com/martenwallewein/torrent-client/socket"
-	"github.com/martenwallewein/torrent-client/message"
 	"github.com/martenwallewein/torrent-client/handshake"
+	"github.com/martenwallewein/torrent-client/message"
+	"github.com/martenwallewein/torrent-client/peers"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -22,12 +23,14 @@ import (
 
 // A Client is a TCP connection with a peer
 type Client struct {
-	Conn     packets.UDPConn
-	Choked   bool
-	Bitfield bitfield.Bitfield
-	Peer     peers.Peer
-	InfoHash [20]byte
-	PeerID   [20]byte
+	Conn            packets.UDPConn
+	Choked          bool
+	Bitfield        bitfield.Bitfield
+	Peer            peers.Peer
+	InfoHash        [20]byte
+	PeerID          [20]byte
+	DiscoveryConfig *config.PeerDiscoveryConfig
+	DhtNode         *dht_node.DhtNode
 }
 
 //LastSelection users could add more fields
@@ -52,13 +55,17 @@ func (lastSel *ClientInitiatedSelection) CustomPathSelectAlg(pathSet *pathselect
 	return pathSet.GetPathSmallHopCount(1), nil
 }
 
-func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handshake.Handshake, error) {
+// send BitTorrent handshake and wait for response, ping remotes DHT Node when existing as specified in BEP5
+func completeHandshake(
+	conn packets.UDPConn,
+	infohash, peerID [20]byte,
+	discoveryConfig *config.PeerDiscoveryConfig) (*handshake.Handshake, error) {
 
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	defer conn.SetDeadline(time.Time{}) // Disable the deadline
 	// time.Sleep(3 * time.Second)
 	log.Infof("Starting handshake with remote %s...", conn.GetRemote())
-	req := handshake.New(infohash, peerID)
+	req := handshake.New(infohash, peerID, discoveryConfig.EnableDht)
 
 	_, err := conn.Write(req.Serialize())
 
@@ -75,6 +82,15 @@ func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handsh
 	}
 	if !bytes.Equal(res.InfoHash[:], infohash[:]) {
 		return nil, fmt.Errorf("Expected infohash %x but got %x", res.InfoHash, infohash)
+	}
+	if res.DhtSupport && discoveryConfig.EnableDht {
+		defer func() {
+			log.Info("sending ping")
+			_, err = conn.Write(message.FormatPort(discoveryConfig.DhtPort).Serialize())
+			if err != nil {
+				log.Errorf("error sending ping")
+			}
+		}()
 	}
 	return res, nil
 }
@@ -112,7 +128,14 @@ func (mp *MPClient) GetSocket() *smp.MPPeerSock {
 	return mp.mpSock
 }
 
-func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, peerID, infoHash [20]byte) ([]*Client, error) {
+func (mp *MPClient) DialAndWaitForConnectBack(
+	local string,
+	peer peers.Peer,
+	peerID,
+	infoHash [20]byte,
+	discoveryConfig *config.PeerDiscoveryConfig,
+	node *dht_node.DhtNode) ([]*Client, error) {
+
 	address, err := snet.ParseUDPAddr(peer.Addr)
 	if err != nil {
 		return nil, err
@@ -159,7 +182,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 			continue
 		}
 
-		_, err = completeHandshake(v, infoHash, peerID)
+		_, err = completeHandshake(v, infoHash, peerID, discoveryConfig)
 		if err != nil {
 			mpSock.UnderlaySocket.CloseAll()
 			return nil, err
@@ -175,12 +198,14 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 		log.Debugf("Connection GetRemote %s", v.GetRemote())
 
 		c := Client{
-			Peer:     peer,
-			PeerID:   peerID,
-			Conn:     v,
-			InfoHash: infoHash,
-			Choked:   false,
-			Bitfield: bf,
+			Peer:            peer,
+			PeerID:          peerID,
+			Conn:            v,
+			InfoHash:        infoHash,
+			Choked:          false,
+			Bitfield:        bf,
+			DiscoveryConfig: discoveryConfig,
+			DhtNode:         node,
 		}
 		clients = append(clients, &c)
 	}
@@ -194,7 +219,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 }
 
 func (c *Client) Handshake() error {
-	_, err := completeHandshake(c.Conn, c.InfoHash, c.PeerID)
+	_, err := completeHandshake(c.Conn, c.InfoHash, c.PeerID, c.DiscoveryConfig)
 	if err != nil {
 		return err
 	}

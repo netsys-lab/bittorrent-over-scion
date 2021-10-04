@@ -7,10 +7,11 @@ import (
 	"net"
 
 	"github.com/martenwallewein/torrent-client/bitfield"
+	"github.com/martenwallewein/torrent-client/config"
+	"github.com/martenwallewein/torrent-client/dht_node"
 	"github.com/martenwallewein/torrent-client/handshake"
 	"github.com/martenwallewein/torrent-client/message"
 	"github.com/martenwallewein/torrent-client/peers"
-	"github.com/martenwallewein/torrent-client/socket"
 	"github.com/martenwallewein/torrent-client/torrentfile"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
@@ -18,15 +19,15 @@ import (
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/netsys-lab/scion-path-discovery/socket"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
 )
 
 // A Client is a TCP connection with a peer
 type Server struct {
 	Conns             []packets.UDPConn
 	Choked            bool
-	peers             []peers.Peer
+	peers             peers.PeerSet
 	infoHash          [20]byte
 	lAddr             string
 	localAddr         *snet.UDPAddr
@@ -35,6 +36,8 @@ type Server struct {
 	torrentFile       *torrentfile.TorrentFile
 	NumPaths          int
 	DialBackStartPort int
+	discoveryConfig   *config.PeerDiscoveryConfig
+	dhtNode           *dht_node.DhtNode // dht note controlled by this server
 }
 
 //LastSelection users could add more fields
@@ -49,7 +52,7 @@ func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*
 	return ps, nil
 }
 
-func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string, numPaths, dialBackPort int) (*Server, error) {
+func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string, numPaths, dialBackPort int, discoveryConfig *config.PeerDiscoveryConfig) (*Server, error) {
 
 	// Maybe there is an efficient way to do this, but for Bittorrent its not that useful...
 	if pathSelectionResponsibility == "client" {
@@ -62,18 +65,34 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	}
 
 	s := &Server{
-		peers:             make([]peers.Peer, 0),
+		peers:             peers.NewPeerSet(0),
 		Conns:             make([]packets.UDPConn, 0),
 		lAddr:             lAddr,
 		localAddr:         localAddr,
 		torrentFile:       torrentFile,
 		NumPaths:          numPaths,
 		DialBackStartPort: dialBackPort,
+		discoveryConfig:   discoveryConfig,
 	}
 
 	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
 	for i := range torrentFile.PieceHashes {
 		s.Bitfield.SetPiece(i)
+	}
+
+	if discoveryConfig.EnableDht {
+		nodeAddr := *localAddr.Host
+		nodeAddr.Port = int(discoveryConfig.DhtPort)
+
+		startingNodes := append(torrentFile.Nodes, discoveryConfig.DhtNodes...)
+		node, err := dht_node.New(&nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
+			log.Infof("received peer via dht: %s, peer already known: %t", peer, s.hasPeer(peer))
+			s.peers.Add(peer)
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.dhtNode = node
 	}
 
 	return s, nil
@@ -204,6 +223,34 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			if err != nil {
 				return err
 			}
+		case message.MsgPort:
+			log.Debug("got port message")
+			if !s.discoveryConfig.EnableDht ||
+				s.dhtNode == nil {
+				log.Info("got port message but dht is not enabled")
+				break
+			}
+			remote := conn.GetRemote()
+			if remote == nil {
+				log.Error("could not get remote from port message")
+				break
+			}
+			remoteDhtPort, err := message.ParsePort(msg)
+			if err != nil {
+				log.Error("could not parse port message")
+				break
+			}
+			remoteDht := snet.UDPAddr{
+				IA: remote.IA,
+				Host: &net.UDPAddr{
+					IP:   remote.Host.IP,
+					Port: int(remoteDhtPort),
+					Zone: remote.Host.Zone,
+				},
+			}
+			log.Debugf("sending dht ping to %s",
+				remoteDht)
+			go s.dhtNode.Node.Ping(&remoteDht)
 		}
 	}
 }
@@ -219,6 +266,16 @@ func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
 		return err
 	}
 
+	if s.discoveryConfig.EnableDht && s.dhtNode != nil && hs.DhtSupport {
+		defer func() {
+			log.Info("sending ping")
+			_, err := conn.Write(message.FormatPort(s.discoveryConfig.DhtPort).Serialize())
+			if err != nil {
+				log.Error("error sending ping")
+			}
+		}()
+	}
+
 	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
 	_, err = conn.Write(msg.Serialize())
 	if err != nil {
@@ -226,4 +283,14 @@ func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
 	}
 
 	return nil
+}
+
+func (s Server) hasPeer(peer peers.Peer) bool {
+	return s.peers.Contains(peer)
+}
+
+func (s Server) Close() {
+	if s.dhtNode != nil {
+		s.dhtNode.Close()
+	}
 }

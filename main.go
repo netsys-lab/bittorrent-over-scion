@@ -1,9 +1,13 @@
 package main
 
 import (
-	"io/ioutil"
-	log "github.com/sirupsen/logrus"
 	"github.com/anacrolix/tagflag"
+	"github.com/netsys-lab/dht"
+	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
+	"io/ioutil"
+
+	"github.com/martenwallewein/torrent-client/config"
 	"github.com/martenwallewein/torrent-client/server"
 	"github.com/martenwallewein/torrent-client/torrentfile"
 )
@@ -19,6 +23,9 @@ var flags = struct {
 	NumPaths                    int
 	DialBackStartPort           int
 	LogLevel                    string
+	EnableDht                   bool
+	DhtPort                     int
+	DhtBootstrapAddr            string
 }{
 	Seed:                        false,
 	PathSelectionResponsibility: "server",
@@ -56,6 +63,18 @@ func main() {
 	setLogging(flags.LogLevel)
 
 	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
+
+	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
+
+	peerDiscoveryConfig.EnableDht = flags.EnableDht
+	dhtAddr, err := snet.ParseUDPAddr(flags.DhtBootstrapAddr)
+	if err == nil {
+		peerDiscoveryConfig.DhtNodes = []dht.Addr{dht.NewAddr(*dhtAddr)}
+	}
+	if flags.DhtPort > 0 {
+		peerDiscoveryConfig.DhtPort = uint16(flags.DhtPort)
+	}
+
 	tf, err := torrentfile.Open(flags.InPath)
 	if err != nil {
 		log.Fatal(err)
@@ -69,7 +88,7 @@ func main() {
 		}
 		log.Info("Loaded file to RAM")
 		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
-		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility, flags.NumPaths, flags.DialBackStartPort)
+		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility, flags.NumPaths, flags.DialBackStartPort, &peerDiscoveryConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -85,7 +104,7 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		err = tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility)
+		err = tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility, &peerDiscoveryConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
