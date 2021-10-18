@@ -3,8 +3,14 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"time"
+
+	smp "github.com/netsys-lab/scion-path-discovery/api"
+	"github.com/netsys-lab/scion-path-discovery/packets"
+	"github.com/netsys-lab/scion-path-discovery/pathselection"
+	"github.com/netsys-lab/scion-path-discovery/socket"
+	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/veggiedefender/torrent-client/bitfield"
 	"github.com/veggiedefender/torrent-client/peers"
@@ -16,20 +22,47 @@ import (
 
 // A Client is a TCP connection with a peer
 type Client struct {
-	Conn     net.Conn
+	Conn     packets.UDPConn
 	Choked   bool
 	Bitfield bitfield.Bitfield
-	peer     peers.Peer
-	infoHash [20]byte
-	peerID   [20]byte
+	Peer     peers.Peer
+	InfoHash [20]byte
+	PeerID   [20]byte
 }
 
-func completeHandshake(conn net.Conn, infohash, peerID [20]byte) (*handshake.Handshake, error) {
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
-	defer conn.SetDeadline(time.Time{}) // Disable the deadline
+//LastSelection users could add more fields
+type ClientSelection struct {
+	lastSelectedPathSet pathselection.PathSet
+}
 
+//CustomPathSelectAlg this is where the user actually wants to implement its logic in
+func (lastSel *ClientSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
+	// Connect via shortest path
+	return pathSet.GetPathSmallHopCount(3), nil
+}
+
+//LastSelection users could add more fields
+type ClientInitiatedSelection struct {
+	lastSelectedPathSet pathselection.PathSet
+}
+
+//CustomPathSelectAlg this is where the user actually wants to implement its logic in
+func (lastSel *ClientInitiatedSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
+	// Connect via shortest path
+	return pathSet.GetPathSmallHopCount(1), nil
+}
+
+func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handshake.Handshake, error) {
+	// TODO: Add Deadline Methods
+	// conn.SetDeadline(time.Now().Add(3 * time.Second))
+	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
+	// time.Sleep(3 * time.Second)
+	log.Infof("Starting handshake with remote %s...", conn.GetRemote())
 	req := handshake.New(infohash, peerID)
+	time.Sleep(1 * time.Second)
 	_, err := conn.Write(req.Serialize())
+
+	log.Infof("Wrote packet")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -46,9 +79,9 @@ func completeHandshake(conn net.Conn, infohash, peerID [20]byte) (*handshake.Han
 	return res, nil
 }
 
-func recvBitfield(conn net.Conn) (bitfield.Bitfield, error) {
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
-	defer conn.SetDeadline(time.Time{}) // Disable the deadline
+func recvBitfield(conn packets.UDPConn) (bitfield.Bitfield, error) {
+	// conn.SetDeadline(time.Now().Add(5 * time.Second))
+	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
 
 	msg, err := message.Read(conn)
 	if err != nil {
@@ -62,39 +95,131 @@ func recvBitfield(conn net.Conn) (bitfield.Bitfield, error) {
 		err := fmt.Errorf("Expected bitfield but got ID %d", msg.ID)
 		return nil, err
 	}
-	fmt.Println(msg.Payload)
+	// fmt.Println(msg.Payload)
 	return msg.Payload, nil
 }
 
-// New connects with a peer, completes a handshake, and receives a handshake
-// returns an err if any of those fail.
-func New(peer peers.Peer, peerID, infoHash [20]byte) (*Client, error) {
-	conn, err := net.DialTimeout("tcp", peer.String(), 3*time.Second)
+type MPClient struct {
+	Client
+	mpSock *smp.MPPeerSock
+}
+
+func NewMPClient() *MPClient {
+	return &MPClient{}
+}
+
+func (mp *MPClient) GetSocket() *smp.MPPeerSock {
+	return mp.mpSock
+}
+
+func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, peerID, infoHash [20]byte) ([]*Client, error) {
+	address, err := snet.ParseUDPAddr(peer.Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = completeHandshake(conn, infoHash, peerID)
+	sel := ClientInitiatedSelection{}
+	log.Debugf("Dialing from %s to %s", local, address)
+	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
+		Transport:                   "QUIC",
+		PathSelectionResponsibility: "CLIENT", // TODO: Server
+		MultiportMode:               true,
+	})
+	mp.mpSock = mpSock
+	err = mpSock.Listen()
+
 	if err != nil {
-		conn.Close()
 		return nil, err
 	}
 
-	fmt.Println("Completed handshake")
-	bf, err := recvBitfield(conn)
+	// Connect via one path
+	err = mpSock.Connect(&sel, &socket.ConnectOptions{
+		DontWaitForIncoming:     true,
+		SendAddrPacket:          true,
+		NoPeriodicPathSelection: true,
+	})
+
 	if err != nil {
-		conn.Close()
 		return nil, err
 	}
 
-	return &Client{
+	// Wait for incoming connections
+	_, err = mpSock.WaitForPeerConnect(nil)
+
+	if err != nil {
+		return nil, err
+	}
+	clients := make([]*Client, 0)
+	var bf bitfield.Bitfield
+	conLen := len(mpSock.UnderlaySocket.GetConnections())
+	for i, v := range mpSock.UnderlaySocket.GetConnections() {
+
+		// Last one is incoming connection, which we need to skip here...
+		if i == conLen-1 {
+			continue
+		}
+
+		_, err = completeHandshake(v, infoHash, peerID)
+		if err != nil {
+			mpSock.UnderlaySocket.CloseAll()
+			return nil, err
+		}
+
+		log.Infof("Completed handshake over conn %p\n", v)
+		bf, err = recvBitfield(v)
+		if err != nil {
+			mpSock.UnderlaySocket.CloseAll()
+			return nil, err
+		}
+
+		c := Client{
+			Peer:     peer,
+			PeerID:   peerID,
+			Conn:     v,
+			InfoHash: infoHash,
+			Choked:   false,
+			Bitfield: bf,
+		}
+		clients = append(clients, &c)
+	}
+
+	mp.InfoHash = infoHash
+	mp.Peer = peer
+	mp.PeerID = peerID
+	mp.Bitfield = bf
+
+	return clients, nil
+}
+
+func (c *Client) Handshake() error {
+	_, err := completeHandshake(c.Conn, c.InfoHash, c.PeerID)
+	if err != nil {
+		return err
+	}
+
+	c.Bitfield, err = recvBitfield(c.Conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (mp *MPClient) WaitForNewClient() (*Client, error) {
+
+	conn, err := mp.mpSock.UnderlaySocket.WaitForIncomingConn()
+	if err != nil {
+		return nil, err
+	}
+	c := Client{
+		Peer:     mp.Peer,
+		PeerID:   mp.PeerID,
 		Conn:     conn,
-		Choked:   true,
-		Bitfield: bf,
-		peer:     peer,
-		infoHash: infoHash,
-		peerID:   peerID,
-	}, nil
+		InfoHash: mp.InfoHash,
+		Choked:   false,
+		Bitfield: mp.Bitfield,
+	}
+	return &c, nil
 }
 
 // Read reads and consumes a message from the connection

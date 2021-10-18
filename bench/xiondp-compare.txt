@@ -1,0 +1,11 @@
+Torrent-Client:
+1 cons, MTU 1500 -> 550Mbit/s
+2 cons, MTU 1500 -> 1120Mbit/s
+3 cons, MTU 1500 -> 1640Mbit/s
+4 cons, MTU 1500 -> 2210gbit/s
+
+Torrent:
+1 cons, MTU 1500 -> 420Mbit/s
+2 cons, MTU 1500 -> 830Mbit/s
+3 cons, MTU 1500 -> 1280Mbit/s
+4 cons, MTU 1500 -> 1510gbit/s

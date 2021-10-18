@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"fmt"
-	"net"
 	"os"
 
 	"github.com/jackpal/bencode-go"
+	"github.com/scionproto/scion/go/lib/snet"
 	"github.com/veggiedefender/torrent-client/p2p"
 	"github.com/veggiedefender/torrent-client/peers"
 )
@@ -40,20 +40,26 @@ type bencodeTorrent struct {
 }
 
 // DownloadToFile downloads a torrent and writes it to a file
-func (t *TorrentFile) DownloadToFile(path string, peer string) error {
+func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pathSelectionResponsibility string) error {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
 		return err
 	}
 	var targetPeers []peers.Peer
+
 	if peer != "" {
-		pAddr, _ := net.ResolveTCPAddr("tcp", peer)
-		targetPeers = make([]peers.Peer, 1)
-		targetPeers[0] = peers.Peer{
-			IP:   pAddr.IP,
-			Port: uint16(pAddr.Port),
+		i := 0
+		pAddr, _ := snet.ParseUDPAddr(peer)
+		// pAddr, _ := net.ResolveTCPAddr("tcp", peer)
+
+		p := peers.Peer{
+			IP:    pAddr.Host.IP,
+			Port:  uint16(pAddr.Host.Port),
+			Addr:  peer,
+			Index: i,
 		}
+		targetPeers = append(targetPeers, p)
 
 	} else {
 		targetPeers, err = t.requestPeers(peerID, Port)
@@ -63,13 +69,15 @@ func (t *TorrentFile) DownloadToFile(path string, peer string) error {
 	}
 
 	torrent := p2p.Torrent{
-		Peers:       targetPeers,
-		PeerID:      peerID,
-		InfoHash:    t.InfoHash,
-		PieceHashes: t.PieceHashes,
-		PieceLength: t.PieceLength,
-		Length:      t.Length,
-		Name:        t.Name,
+		Peers:                       targetPeers,
+		PeerID:                      peerID,
+		InfoHash:                    t.InfoHash,
+		PieceHashes:                 t.PieceHashes,
+		PieceLength:                 t.PieceLength,
+		Length:                      t.Length,
+		Name:                        t.Name,
+		Local:                       local,
+		PathSelectionResponsibility: pathSelectionResponsibility,
 	}
 	buf, err := torrent.Download()
 	if err != nil {
@@ -92,6 +100,8 @@ func (t *TorrentFile) DownloadToFile(path string, peer string) error {
 func Open(path string) (TorrentFile, error) {
 	file, err := os.Open(path)
 	if err != nil {
+		fmt.Printf("Open for file failed %s", path)
+		fmt.Println(err)
 		return TorrentFile{}, err
 	}
 	defer file.Close()

@@ -2,34 +2,55 @@ package main
 
 import (
 	"io/ioutil"
-	"log"
-	"os"
 
+	log "github.com/sirupsen/logrus"
+
+	"github.com/anacrolix/tagflag"
 	"github.com/veggiedefender/torrent-client/server"
 	"github.com/veggiedefender/torrent-client/torrentfile"
 )
 
-func main() {
-	inPath := os.Args[1]
-	outPath := os.Args[2]
-	peer := os.Args[3]
-	seed := os.Args[4]
-	file := os.Args[5]
+var flags = struct {
+	InPath                      string
+	OutPath                     string
+	Peer                        string
+	Seed                        bool
+	File                        string
+	Local                       string
+	PathSelectionResponsibility string
+	NumPaths                    int
+	DialBackStartPort           int
+}{
+	Seed:                        false,
+	PathSelectionResponsibility: "server",
+	NumPaths:                    1,
+	DialBackStartPort:           45000,
+}
 
-	tf, err := torrentfile.Open(inPath)
+func main() {
+	log.SetLevel(log.DebugLevel)
+	tagflag.Parse(&flags)
+
+	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
+	tf, err := torrentfile.Open(flags.InPath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if seed == "true" {
-		tf.Content, err = ioutil.ReadFile(file)
+	if flags.Seed {
+		log.Info("Loading file to RAM")
+		tf.Content, err = ioutil.ReadFile(flags.File)
 		if err != nil {
 			log.Fatal(err)
 		}
-		server, err := server.NewServer(peer, &tf)
+		log.Info("Loaded file to RAM")
+		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
+		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility)
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		log.Info("Created Server")
 
 		err = server.ListenHandshake()
 		if err != nil {
@@ -40,7 +61,7 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		err = tf.DownloadToFile(outPath, peer)
+		err = tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility)
 		if err != nil {
 			log.Fatal(err)
 		}

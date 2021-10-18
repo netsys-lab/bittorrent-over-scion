@@ -70,6 +70,5 @@ func Read(r io.Reader) (*Handshake, error) {
 		InfoHash: infoHash,
 		PeerID:   peerID,
 	}
-
 	return &h, nil
 }

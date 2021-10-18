@@ -2,3 +2,4 @@
 *.torrent
 *.iso
 torrent-client
+bench/
