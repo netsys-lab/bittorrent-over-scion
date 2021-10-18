@@ -45,7 +45,7 @@ func main() {
 		}
 		log.Info("Loaded file to RAM")
 		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
-		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility)
+		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility, flags.NumPaths, flags.DialBackStartPort)
 		if err != nil {
 			log.Fatal(err)
 		}
