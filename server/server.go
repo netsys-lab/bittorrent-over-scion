@@ -22,15 +22,17 @@ import (
 
 // A Client is a TCP connection with a peer
 type Server struct {
-	Conns       []packets.UDPConn
-	Choked      bool
-	peers       []peers.Peer
-	infoHash    [20]byte
-	lAddr       string
-	localAddr   *snet.UDPAddr
-	listener    *net.Listener
-	Bitfield    bitfield.Bitfield
-	torrentFile *torrentfile.TorrentFile
+	Conns             []packets.UDPConn
+	Choked            bool
+	peers             []peers.Peer
+	infoHash          [20]byte
+	lAddr             string
+	localAddr         *snet.UDPAddr
+	listener          *net.Listener
+	Bitfield          bitfield.Bitfield
+	torrentFile       *torrentfile.TorrentFile
+	NumPaths          int
+	DialBackStartPort int
 }
 
 //LastSelection users could add more fields
@@ -45,7 +47,7 @@ func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*
 	return ps, nil
 }
 
-func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string) (*Server, error) {
+func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string, numPaths, dialBackPort int) (*Server, error) {
 
 	// Maybe there is an efficient way to do this, but for Bittorrent its not that useful...
 	if pathSelectionResponsibility == "client" {
@@ -58,11 +60,13 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	}
 
 	s := &Server{
-		peers:       make([]peers.Peer, 0),
-		Conns:       make([]packets.UDPConn, 0),
-		lAddr:       lAddr,
-		localAddr:   localAddr,
-		torrentFile: torrentFile,
+		peers:             make([]peers.Peer, 0),
+		Conns:             make([]packets.UDPConn, 0),
+		lAddr:             lAddr,
+		localAddr:         localAddr,
+		torrentFile:       torrentFile,
+		NumPaths:          numPaths,
+		DialBackStartPort: dialBackPort,
 	}
 
 	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
@@ -84,7 +88,7 @@ func (s *Server) ListenHandshake() error {
 	if err != nil {
 		return err
 	}
-	startPort := 45000 // TODO: Configure
+	startPort := s.DialBackStartPort
 	for {
 		remote, err := mpListener.WaitForMPPeerSockConnect()
 		if err != nil {
@@ -108,7 +112,9 @@ func (s *Server) ListenHandshake() error {
 				return
 			}
 			log.Debugf("Connecting to %s", remote.String())
-			err = mpSock.Connect(&ServerSelection{}, &socket.ConnectOptions{
+			err = mpSock.Connect(&ServerSelection{
+				numPaths: s.NumPaths,
+			}, &socket.ConnectOptions{
 				SendAddrPacket:      true,
 				DontWaitForIncoming: true,
 			})

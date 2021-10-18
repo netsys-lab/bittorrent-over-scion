@@ -18,9 +18,13 @@ var flags = struct {
 	File                        string
 	Local                       string
 	PathSelectionResponsibility string
+	NumPaths                    int
+	DialBackStartPort           int
 }{
 	Seed:                        false,
 	PathSelectionResponsibility: "server",
+	NumPaths:                    1,
+	DialBackStartPort:           45000,
 }
 
 func main() {
