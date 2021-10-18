@@ -13,7 +13,7 @@ require (
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect
 	github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f
-	github.com/netsys-lab/scion-path-discovery v0.0.0-20210920082250-82e0785b5f6c
+	github.com/netsys-lab/scion-path-discovery v0.0.0-20211013091702-5966a33ca044
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/prometheus/common v0.29.0 // indirect
 	github.com/scionproto/scion v0.6.0
@@ -31,9 +31,3 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20210615210310-549c53a90c2a // indirect
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
-
-// replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps
-
-replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/netsys-lab/scion-path-discovery
-
-// replace github.com/netsec-ethz/scion-apps => /home/marten/go/src/github.com/git.deinstapel.de/scion-apps

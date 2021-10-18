@@ -41,7 +41,7 @@ type ServerSelection struct {
 
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	ps := pathSet.GetPathSmallHopCount(lastSel.numPaths + 1)
+	ps := pathSet.GetPathSmallHopCount(2) // lastSel.numPaths + 1)
 	lastSel.numPaths++
 	if lastSel.numPaths > 4 {
 		lastSel.numPaths = 4
@@ -132,7 +132,7 @@ func (s *Server) ListenHandshake() error {
 		}
 		// log.Errorf("Handing connection, dialing back")
 		log.Infof("Got new Client, dialing back")
-		startPort += 1000
+		startPort += 1017
 		// time.Sleep(2 * time.Second)
 		go func(remote *snet.UDPAddr, startPort int) {
 			// TODO: Replace port in address
