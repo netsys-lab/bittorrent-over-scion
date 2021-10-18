@@ -154,28 +154,24 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 	conLen := len(mpSock.UnderlaySocket.GetConnections())
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
-		// TODO: What about this one?
+		// Last one is incoming connection, which we need to skip here...
 		if i == conLen-1 {
 			continue
 		}
 
-		// Handshake only over first conn
-		// TODO: Make this more flexible and don't stop all on error
-
-		// if i == 1 {
 		_, err = completeHandshake(v, infoHash, peerID)
 		if err != nil {
 			mpSock.UnderlaySocket.CloseAll()
 			return nil, err
 		}
 
-		fmt.Printf("Completed handshake over conn %p\n", v)
+		log.Infof("Completed handshake over conn %p\n", v)
 		bf, err = recvBitfield(v)
 		if err != nil {
 			mpSock.UnderlaySocket.CloseAll()
 			return nil, err
 		}
-		// }
+
 		c := Client{
 			Peer:     peer,
 			PeerID:   peerID,
@@ -201,7 +197,6 @@ func (c *Client) Handshake() error {
 		return err
 	}
 
-	fmt.Printf("Completed handshake over conn %p\n", c.Conn)
 	c.Bitfield, err = recvBitfield(c.Conn)
 	if err != nil {
 		return err
@@ -225,117 +220,6 @@ func (mp *MPClient) WaitForNewClient() (*Client, error) {
 		Bitfield: mp.Bitfield,
 	}
 	return &c, nil
-}
-
-func (mp *MPClient) Dial(local string, peer peers.Peer, peerID, infoHash [20]byte) ([]*Client, error) {
-	address, err := snet.ParseUDPAddr(peer.Addr)
-	if err != nil {
-		return nil, err
-	}
-
-	sel := ClientSelection{}
-	log.Debugf("Dialing from %s to %s", local, address)
-	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
-		Transport:                   "QUIC",
-		PathSelectionResponsibility: "CLIENT", // TODO: Server
-		MultiportMode:               true,
-	})
-	mp.mpSock = mpSock
-	err = mpSock.Listen()
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Connect via one path
-	err = mpSock.Connect(&sel, &socket.ConnectOptions{
-		DontWaitForIncoming: false,
-		SendAddrPacket:      true,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	clients := make([]*Client, 0)
-	var bf bitfield.Bitfield
-	// conLen := len(mpSock.UnderlaySocket.GetConnections())
-	for i, v := range mpSock.UnderlaySocket.GetConnections() {
-
-		if i == 0 {
-			continue
-		}
-
-		// Handshake only over first conn
-		// TODO: Make this more flexible and don't stop all on error
-
-		// if i == 1 {
-		_, err = completeHandshake(v, infoHash, peerID)
-		if err != nil {
-			mpSock.UnderlaySocket.CloseAll()
-			return nil, err
-		}
-
-		fmt.Printf("Completed handshake over conn %p\n", v)
-		bf, err = recvBitfield(v)
-		if err != nil {
-			mpSock.UnderlaySocket.CloseAll()
-			return nil, err
-		}
-		// }
-		c := Client{
-			Peer:     peer,
-			PeerID:   peerID,
-			Conn:     v,
-			InfoHash: infoHash,
-			Choked:   false,
-			Bitfield: bf,
-		}
-		clients = append(clients, &c)
-	}
-
-	mp.InfoHash = infoHash
-	mp.Peer = peer
-	mp.PeerID = peerID
-	mp.Bitfield = bf
-
-	return clients, nil
-}
-
-// New connects with a peer, completes a handshake, and receives a handshake
-// returns an err if any of those fail.
-func New(peer peers.Peer, peerID, infoHash [20]byte) (*Client, error) {
-	/*sock := socket.NewSocket("scion")
-	conn, err := sock.Dial(peer.Addr, peer.Index)
-	// conn, err := net.DialTimeout("tcp", peer.String(), 3*time.Second)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Printf("Dial to %s done, starting handshake", peer.String())
-
-	_, err = completeHandshake(conn, infoHash, peerID)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	fmt.Println("Completed handshake")
-	bf, err := recvBitfield(conn)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-
-	return &Client{
-		Conn:     conn,
-		Choked:   true,
-		Bitfield: bf,
-		peer:     peer,
-		infoHash: infoHash,
-		peerID:   peerID,
-	}, nil*/
-	return nil, nil
 }
 
 // Read reads and consumes a message from the connection

@@ -39,23 +39,15 @@ type ServerSelection struct {
 	numPaths            int
 }
 
-//CustomPathSelectAlg this is where the user actually wants to implement its logic in
-func (lastSel *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	ps := pathSet.GetPathSmallHopCount(2) // lastSel.numPaths + 1)
-	lastSel.numPaths++
-	if lastSel.numPaths > 4 {
-		lastSel.numPaths = 4
-	}
+// We use server-side pathselection, meaning the server connects back to the client
+func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
+	ps := pathSet.GetPathSmallHopCount(s.numPaths)
 	return ps, nil
 }
 
 func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string) (*Server, error) {
-	// localAddr, err := net.ResolveTCPAddr("tcp", lAddr)
-	//if err != nil {
-	//	return nil, err
-	//}
 
-	// TODO: Maybe there is an efficient way to do this, but for Bittorrent its not that useful...
+	// Maybe there is an efficient way to do this, but for Bittorrent its not that useful...
 	if pathSelectionResponsibility == "client" {
 		return nil, errors.New("client based pathselection not supported yet")
 	}
@@ -73,7 +65,6 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 		torrentFile: torrentFile,
 	}
 
-	// TODO: Correct length!
 	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
 	for i := range torrentFile.PieceHashes {
 		s.Bitfield.SetPiece(i)
@@ -84,34 +75,6 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 
 func (s *Server) ListenHandshake() error {
 	var err error
-	// sock := socket.NewSocket("scion")
-
-	// s.listener, err = net.ListenTCP("tcp", s.localAddr)
-
-	// fmt.Printf("Listen TCP on %s\n", s.localAddr)
-
-	// TODO: FIx loop with MPSock implementation
-	// for {
-	// Listen for an incoming connection.
-	// conn, err := sock.Accept()
-	/*sock := smp.NewMPPeerSock(s.lAddr, nil, &smp.MPSocketOptions{
-		Transport:                   "QUIC",
-		PathSelectionResponsibility: "CLIENT", // TODO: Change to server
-	})
-	err = sock.Listen()
-	// s.listener, err = sock.Listen(s.localAddr.String())
-	if err != nil {
-		return err
-	}
-	// sel := ServerSelection{}
-	// TODO: Add pathselection
-	remote, err := sock.WaitForPeerConnect(nil)
-	if err != nil {
-		return err
-	}
-
-	sock.SetPeer(remote)
-	*/
 
 	mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
 		Transport: "QUIC",
@@ -121,22 +84,15 @@ func (s *Server) ListenHandshake() error {
 	if err != nil {
 		return err
 	}
-
-	// log.Errorf("MPListener Started")
-
 	startPort := 45000 // TODO: Configure
 	for {
 		remote, err := mpListener.WaitForMPPeerSockConnect()
 		if err != nil {
 			return err
 		}
-		// log.Errorf("Handing connection, dialing back")
 		log.Infof("Got new Client, dialing back")
-		startPort += 1017
-		// time.Sleep(2 * time.Second)
+		startPort += 101 // Just increase by a random number to avoid using often used ports (e.g. 50000)
 		go func(remote *snet.UDPAddr, startPort int) {
-			// TODO: Replace port in address
-			// TODO: Logging
 			ladr := s.localAddr.Copy()
 			ladr.Host.Port = startPort
 			mpSock := smp.NewMPPeerSock(ladr.String(), remote, &smp.MPSocketOptions{
@@ -151,7 +107,6 @@ func (s *Server) ListenHandshake() error {
 				log.Errorf("Failed to listen %v", err)
 				return
 			}
-			// time.Sleep(2 * time.Second)
 			log.Debugf("Connecting to %s", remote.String())
 			err = mpSock.Connect(&ServerSelection{}, &socket.ConnectOptions{
 				SendAddrPacket:      true,
@@ -161,18 +116,9 @@ func (s *Server) ListenHandshake() error {
 				log.Error(err)
 				return
 			}
-
-			// conns := mpSock.UnderlaySocket.GetConnections()
-
 			conns := mpSock.UnderlaySocket.GetConnections()
 			log.Debugf("Got new connections %d", len(conns))
-			// if len(s.Conns) < len(conns) {
-			//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
-			//		log.Infof("Appending new Conn")
-			//		s.Conns = append(s.Conns, conns[i])
-			//		go s.handleConnection(conns[i], true)
-			//	}
-			//}
+
 			for i, conn := range conns {
 				if i == 0 {
 					log.Debugf("Skip incoming connection")
@@ -184,7 +130,7 @@ func (s *Server) ListenHandshake() error {
 
 			}
 			for {
-				// TODO: Filter for new connections
+				// Filter for new connections
 				conns := <-mpSock.OnConnectionsChange
 				log.Debugf("Got new connections %d", len(conns))
 				for i, conn := range conns {
@@ -203,86 +149,19 @@ func (s *Server) ListenHandshake() error {
 					}
 
 				}
-				// if len(s.Conns) < len(conns) {
-				//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
-				//		log.Infof("Appending new Conn")
-				//		s.Conns = append(s.Conns, conns[i])
-				//		go s.handleConnection(conns[i], true)
-				//	}
-				//}
-				/*if len(conns) < 2 {
-					continue
-				}
-				for i, conn := range conns {
-					s.Conns = append(s.Conns, conn)
-					log.Debugf("Starting reading on conn %d with handshake %d", i, i == 0)
-					go s.handleConnection(conn, true)
-
-				}*/
 			}
 
 		}(remote, startPort)
 
 	}
-
-	// TODO: Remove public fields
-	// connections := sock.UnderlaySocket.GetConnections()
-	// TODO: Listen for connection change and update slice
-
-	/*fmt.Printf("Accepted SCION/QUIC Connection on %s\n", conn.LocalAddr())
-	if err != nil {
-		fmt.Println("Error accepting: ", err.Error())
-		return err
-	}*/
-	/*for i, conn := range connections {
-		s.Conns = append(s.Conns, conn)
-		log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
-		go s.handleConnection(conn, true)
-	}
-	for {
-		conns := <-sock.OnConnectionsChange
-		log.Infof("Got new connections %d", len(conns))
-		// if len(s.Conns) < len(conns) {
-		//	for i := len(conns) - len(s.Conns); i < len(conns); i++ {
-		//		log.Infof("Appending new Conn")
-		//		s.Conns = append(s.Conns, conns[i])
-		//		go s.handleConnection(conns[i], true)
-		//	}
-		//}
-		if len(conns) < 2 {
-			continue
-		}
-		for i, conn := range conns {
-			s.Conns = append(s.Conns, conn)
-			log.Infof("Starting reading on conn %d with handshake %d", i, i == 0)
-			go s.handleConnection(conn, true)
-
-		}
-	}*/
-
-	// TODO: Wait for next connection
-	// time.Sleep(100 * time.Second)
-
-	// return nil
-
-	// }
 }
 
 func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) error {
 	if waitForHandshake {
-		// fmt.Printf("Handling handshake on conn %p\n", conn)
 		s.handleIncomingHandshake(conn)
-	} else {
-		buf := make([]byte, 1200)
-		n, err := conn.Read(buf)
-		if err != nil {
-			return err
-		}
-		log.Infof("Read buf %d", n)
 	}
 
 	for {
-		// fmt.Printf("Reading on Conn %p\n", conn)
 		msg, err := message.Read(conn)
 		if err != nil {
 			return err
@@ -294,7 +173,7 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 		if !waitForHandshake {
 			fmt.Printf("Got message %d\n", msg.ID)
 		}
-		//
+
 		switch msg.ID {
 		case message.MsgInterested:
 			retMsg := message.Message{ID: message.MsgUnchoke, Payload: []byte{}}
@@ -302,18 +181,16 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			if err != nil {
 				return err
 			}
-			// fmt.Println("Sent back unChoke")
 		case message.MsgRequest:
 			index, begin, length := message.ParseRequest(msg)
 			if !waitForHandshake {
 				fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
 			}
-			//
+
 			buf := make([]byte, 8)
 			binary.BigEndian.PutUint32(buf[0:4], uint32(index))
 			binary.BigEndian.PutUint32(buf[4:8], uint32(begin))
 			buf = append(buf, s.torrentFile.Content[(index*s.torrentFile.PieceLength)+begin:(index*s.torrentFile.PieceLength)+begin+length]...)
-			// fmt.Println(buf[:128])
 			retMsg := message.Message{ID: message.MsgPiece, Payload: buf}
 			_, err := conn.Write(retMsg.Serialize())
 			if err != nil {
@@ -324,9 +201,7 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 }
 
 func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
-	fmt.Printf("%p: Waiting for Handshake message\n", conn)
 	hs, err := handshake.Read(conn)
-	fmt.Printf("%p: Got for Handshake message\n", conn)
 	if err != nil {
 		return err
 	}
@@ -335,14 +210,12 @@ func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
 	if err != nil {
 		return err
 	}
-	// fmt.Printf("%p: Sent back Handshake message\n", conn)
-	// fmt.Printf("%p: Sending back bitfield\n", conn)
+
 	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
 	_, err = conn.Write(msg.Serialize())
 	if err != nil {
 		return err
 	}
-	///fmt.Printf("%p: Sent back bitfield\n", conn)
 
 	return nil
 }
