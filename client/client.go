@@ -53,16 +53,16 @@ func (lastSel *ClientInitiatedSelection) CustomPathSelectAlg(pathSet *pathselect
 }
 
 func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handshake.Handshake, error) {
-	// TODO: Add Deadline Methods
-	// conn.SetDeadline(time.Now().Add(3 * time.Second))
-	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
+
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	defer conn.SetDeadline(time.Time{}) // Disable the deadline
 	// time.Sleep(3 * time.Second)
 	log.Infof("Starting handshake with remote %s...", conn.GetRemote())
 	req := handshake.New(infohash, peerID)
-	time.Sleep(1 * time.Second)
+
 	_, err := conn.Write(req.Serialize())
 
-	log.Infof("Wrote packet")
+	// log.Infof("Wrote packet")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -80,8 +80,8 @@ func completeHandshake(conn packets.UDPConn, infohash, peerID [20]byte) (*handsh
 }
 
 func recvBitfield(conn packets.UDPConn) (bitfield.Bitfield, error) {
-	// conn.SetDeadline(time.Now().Add(5 * time.Second))
-	// defer conn.SetDeadline(time.Time{}) // Disable the deadline
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	defer conn.SetDeadline(time.Time{}) // Disable the deadline
 
 	msg, err := message.Read(conn)
 	if err != nil {
@@ -165,14 +165,14 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 			return nil, err
 		}
 
-		log.Infof("Completed handshake over conn %p\n", v)
+		log.Debugf("Completed handshake over conn %p\n", v)
 		bf, err = recvBitfield(v)
 		if err != nil {
 			mpSock.UnderlaySocket.CloseAll()
 			return nil, err
 		}
 
-		log.Infof("Connection GetRemote %s", v.GetRemote())
+		log.Debugf("Connection GetRemote %s", v.GetRemote())
 
 		c := Client{
 			Peer:     peer,

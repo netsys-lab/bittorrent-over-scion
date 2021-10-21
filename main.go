@@ -20,16 +20,42 @@ var flags = struct {
 	PathSelectionResponsibility string
 	NumPaths                    int
 	DialBackStartPort           int
+	LogLevel                    string
 }{
 	Seed:                        false,
 	PathSelectionResponsibility: "server",
 	NumPaths:                    1,
 	DialBackStartPort:           45000,
+	LogLevel:                    "INFO",
+}
+
+func setLogging(loglevel string) {
+
+	switch loglevel {
+	case "TRACE":
+		log.SetLevel(log.TraceLevel)
+		break
+	case "DEBUG":
+		log.SetLevel(log.DebugLevel)
+		break
+	case "INFO":
+		log.SetLevel(log.InfoLevel)
+		break
+	case "WARN":
+		log.SetLevel(log.WarnLevel)
+		break
+	case "ERROR":
+		log.SetLevel(log.ErrorLevel)
+		break
+	case "FATAL":
+		log.SetLevel(log.FatalLevel)
+		break
+	}
 }
 
 func main() {
-	log.SetLevel(log.DebugLevel)
 	tagflag.Parse(&flags)
+	setLogging(flags.LogLevel)
 
 	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 	tf, err := torrentfile.Open(flags.InPath)
@@ -38,7 +64,7 @@ func main() {
 	}
 
 	if flags.Seed {
-		log.Info("Loading file to RAM")
+		log.Info("Loading file to RAM...")
 		tf.Content, err = ioutil.ReadFile(flags.File)
 		if err != nil {
 			log.Fatal(err)

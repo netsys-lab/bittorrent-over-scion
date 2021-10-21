@@ -124,7 +124,7 @@ func (s *Server) ListenHandshake() error {
 			}
 			conns := mpSock.UnderlaySocket.GetConnections()
 			log.Debugf("Got new connections %d", len(conns))
-
+			log.Infof("Starting upload to new client...")
 			for i, conn := range conns {
 				if i == 0 {
 					log.Debugf("Skip incoming connection")

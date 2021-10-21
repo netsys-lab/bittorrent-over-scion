@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackpal/bencode-go"
 	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
 	"github.com/veggiedefender/torrent-client/p2p"
 	"github.com/veggiedefender/torrent-client/peers"
 )
@@ -84,6 +85,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 		return err
 	}
 
+	log.Infof("Writing output file %s", path)
 	outFile, err := os.Create(path)
 	if err != nil {
 		return err
@@ -93,6 +95,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 	if err != nil {
 		return err
 	}
+	log.Infof("Done writing output file, download complete")
 	return nil
 }
 
