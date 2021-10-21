@@ -172,6 +172,8 @@ func (mp *MPClient) DialAndWaitForConnectBack(local string, peer peers.Peer, pee
 			return nil, err
 		}
 
+		log.Infof("Connection GetRemote %s", v.GetRemote())
+
 		c := Client{
 			Peer:     peer,
 			PeerID:   peerID,

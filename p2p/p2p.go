@@ -208,6 +208,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer, workQueue chan *pieceWork
 	}
 
 	log.Infof("Completed handshake with %s, got %d clients\n", peer.IP, len(clients))
+	log.Infof("Starting download...")
 	for i, c := range clients {
 		if i == len(clients)-1 {
 			for pw := range workQueue {
