@@ -63,8 +63,8 @@ func (s *SCIONSocket) Listen(addr string) (*net.Listener, error) {
 		Port: address.Host.Port,
 	}
 
-	// conn, err := appnet.Listen(&udpAddr)
-	conn, err := appnet.ListenPort(uint16(udpAddr.Port))
+	conn, err := appnet.Listen(&udpAddr)
+	//conn, err := appnet.ListenPort(uint16(udpAddr.Port))
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +79,7 @@ func (s *SCIONSocket) Listen(addr string) (*net.Listener, error) {
 	l := (*net.Listener)(unsafe.Pointer(s.listener))
 	return l, err
 }
+
 func (s *SCIONSocket) Dial(addr string, index int) (net.Conn, error) {
 
 	if err := InitSQUICCerts(); err != nil {
@@ -91,7 +92,7 @@ func (s *SCIONSocket) Dial(addr string, index int) (net.Conn, error) {
 	}
 	fmt.Printf("Dial SCION to addr %s\n", address)
 
-	sess, err := appquic.DialAddr(address, appnet.MangleSCIONAddr(addr), TLSCfg, &quic.Config{
+	sess, err := appquic.DialAddr(address, address.String(), TLSCfg, &quic.Config{
 		KeepAlive: true,
 	})
 

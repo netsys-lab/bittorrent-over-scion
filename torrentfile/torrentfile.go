@@ -4,14 +4,19 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/jackpal/bencode-go"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
-	"github.com/veggiedefender/torrent-client/p2p"
-	"github.com/veggiedefender/torrent-client/peers"
+
+	"github.com/netsys-lab/dht"
+
+	"github.com/martenwallewein/torrent-client/config"
+	"github.com/martenwallewein/torrent-client/p2p"
+	"github.com/martenwallewein/torrent-client/peers"
 )
 
 // Port to listen on
@@ -20,6 +25,7 @@ const Port uint16 = 6881
 // TorrentFile encodes the metadata from a .torrent file
 type TorrentFile struct {
 	Announce    string
+	Nodes       []dht.Addr
 	InfoHash    [20]byte
 	PieceHashes [][20]byte
 	PieceLength int
@@ -36,41 +42,40 @@ type bencodeInfo struct {
 }
 
 type bencodeTorrent struct {
-	Announce string      `bencode:"announce"`
-	Info     bencodeInfo `bencode:"info"`
+	Announce string          `bencode:"announce"`
+	Nodes    [][]interface{} `bencode:"nodes"`
+	Info     bencodeInfo     `bencode:"info"`
 }
 
 // DownloadToFile downloads a torrent and writes it to a file
-func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pathSelectionResponsibility string) error {
+// This function leeches all pieces of a torrent but never starts seeding. When DHT is enabled in the
+// PeerDiscoveryConfig, the peer will still announce its presence to receive other peers. We therefore announces our
+// presence on a port we are not listening to.
+func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pathSelectionResponsibility string, pc *config.PeerDiscoveryConfig) error {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
 		return err
 	}
-	var targetPeers []peers.Peer
 
+	targetPeers := peers.NewPeerSet(0)
 	if peer != "" {
-		i := 0
-		pAddr, _ := snet.ParseUDPAddr(peer)
+		_, err := snet.ParseUDPAddr(peer)
+		if err != nil {
+			log.Fatal(err)
+		}
 		// pAddr, _ := net.ResolveTCPAddr("tcp", peer)
 
 		p := peers.Peer{
-			IP:    pAddr.Host.IP,
-			Port:  uint16(pAddr.Host.Port),
 			Addr:  peer,
-			Index: i,
+			Index: 0,
 		}
-		targetPeers = append(targetPeers, p)
+		targetPeers.Add(p)
 
-	} else {
-		targetPeers, err = t.requestPeers(peerID, Port)
-		if err != nil {
-			return err
-		}
 	}
 
 	torrent := p2p.Torrent{
-		Peers:                       targetPeers,
+		PeerSet:                     targetPeers,
 		PeerID:                      peerID,
 		InfoHash:                    t.InfoHash,
 		PieceHashes:                 t.PieceHashes,
@@ -79,10 +84,27 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 		Name:                        t.Name,
 		Local:                       local,
 		PathSelectionResponsibility: pathSelectionResponsibility,
+		DiscoveryConfig:             pc,
 	}
+
+	if pc.EnableDht {
+		peerAddr, err := snet.ParseUDPAddr(local)
+		peerPort := uint16(peerAddr.Host.Port)
+		nodeAddr := *peerAddr
+		nodeAddr.Host.Port = int(pc.DhtPort)
+		torrent.DhtNode, err = torrent.EnableDht(nodeAddr.Host, peerPort, t.InfoHash, append(t.Nodes, pc.DhtNodes...))
+		if err != nil {
+			log.Println("could not enable dht")
+		}
+	}
+
 	buf, err := torrent.Download()
 	if err != nil {
 		return err
+	}
+
+	if torrent.DhtNode != nil {
+		torrent.DhtNode.Close()
 	}
 
 	log.Infof("Writing output file %s", path)
@@ -152,6 +174,12 @@ func (bto *bencodeTorrent) toTorrentFile() (TorrentFile, error) {
 	if err != nil {
 		return TorrentFile{}, err
 	}
+
+	nodes, err := bto.parseDhtNodes()
+	if err != nil {
+		return TorrentFile{}, err
+	}
+
 	t := TorrentFile{
 		Announce:    bto.Announce,
 		InfoHash:    infoHash,
@@ -159,6 +187,29 @@ func (bto *bencodeTorrent) toTorrentFile() (TorrentFile, error) {
 		PieceLength: bto.Info.PieceLength,
 		Length:      bto.Info.Length,
 		Name:        bto.Info.Name,
+		Nodes:       *nodes,
 	}
 	return t, nil
+}
+
+// parseDhtNodes receive DHT Nodes from torrent file as specified in BEP 5 Torrent File Extension
+func (bto *bencodeTorrent) parseDhtNodes() (*[]dht.Addr, error) {
+	nodes := make([]dht.Addr, len(bto.Nodes))
+	for i, btoNode := range bto.Nodes {
+		if len(btoNode) != 2 {
+			return nil, errors.New("invalid node format")
+		}
+		host, hostOk := btoNode[0].(string)
+		port, portOk := btoNode[1].(int64)
+		if !hostOk || !portOk {
+			return nil, errors.New("invalid node address")
+		}
+		val := fmt.Sprintf("%s:%d", host, port)
+		addr, err := snet.ParseUDPAddr(val)
+		if err != nil {
+			return nil, errors.New("invalid node address")
+		}
+		nodes[i] = dht.NewAddr(*addr)
+	}
+	return &nodes, nil
 }

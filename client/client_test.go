@@ -5,10 +5,10 @@ import (
 	"net"
 	"testing"
 
-	"github.com/veggiedefender/torrent-client/bitfield"
-	"github.com/veggiedefender/torrent-client/handshake"
+	"github.com/martenwallewein/torrent-client/bitfield"
+	"github.com/martenwallewein/torrent-client/handshake"
 
-	"github.com/veggiedefender/torrent-client/message"
+	"github.com/martenwallewein/torrent-client/message"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -3,3 +3,4 @@
 *.iso
 torrent-client
 bench/
+.idea
