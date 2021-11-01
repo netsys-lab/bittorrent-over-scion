@@ -3,26 +3,26 @@ package dht_node
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
-	"net"
+	"time"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
 	dhtlog "github.com/anacrolix/log" // logger for dht Node
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/scionproto/scion/go/lib/snet"
+
 	"github.com/netsec-ethz/scion-apps/pkg/appnet"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/dht/krpc"
-	peer_store "github.com/netsys-lab/dht/peer-store"
-	"github.com/scionproto/scion/go/lib/snet"
-	log "github.com/sirupsen/logrus"
+	peerStore "github.com/netsys-lab/dht/peer-store"
 )
 
 type DhtNode struct {
 	Node              *dht.Server
-	peersStream       *dht.Announce
 	stats             *dhtStats
 	infoHash          [20]byte
-	nodeAddr          *net.UDPAddr
+	nodeAddr          dht.Addr
 	peerPort          uint16
 	onNewPeerReceived func(peer peers.Peer)
 }
@@ -30,6 +30,7 @@ type DhtNode struct {
 type dhtStats struct {
 	receivedPeers     uint32
 	blockedPeers      uint32
+	recievedSelf      uint32
 	numberOfAnnounces uint32
 	zeroPortsReceived uint32
 }
@@ -39,7 +40,7 @@ type dhtStats struct {
 // onNewPeerReceived, a function to be executed when a new Peer was found, used for adding the new peer to the
 // controlling peers storage
 func New(
-	nodeAddr *net.UDPAddr,
+	nodeAddr *snet.UDPAddr,
 	torrentInfoHash [20]byte,
 	startingNodes []dht.Addr,
 	peerPort uint16,
@@ -48,16 +49,18 @@ func New(
 	log.Infof("creating new dht node, initial nodes: %+v, listening on: %+v, peer port: %d", startingNodes, nodeAddr, peerPort)
 	stats := &dhtStats{}
 
-	con, err := appnet.Listen(nodeAddr)
+	con, err := appnet.Listen(nodeAddr.Host)
 	if err != nil {
-		log.Error("error creating connection for dht Node")
+		log.Error("error creating connection for dht node")
 		return nil, err
 	}
 
+	localNodeAddr := dht.NewAddr(*nodeAddr)
 	dhtConf := dht.NewDefaultServerConfig()
 	dhtConf.Conn = con
-	dhtConf.PeerStore = &peer_store.InMemory{}
-	dhtConf.Logger = dhtlog.Default.FilterLevel(dhtlog.Debug)
+	dhtConf.PeerStore = &peerStore.InMemory{}
+	dhtConf.Logger = dhtLog.Default.FilterLevel(dhtLog.Debug)
+
 	dhtConf.OnAnnouncePeer = func(infoHash metainfo.Hash, scionAddr snet.UDPAddr, port int, portOk bool) {
 		log.Debugf("handling announce for %s - %s - %d - %t", infoHash, scionAddr.String(), port, portOk)
 		var infoH [20]byte
@@ -78,12 +81,14 @@ func New(
 		})
 		atomic.AddUint32(&stats.receivedPeers, 1)
 	}
+
 	dhtConf.StartingNodes = func() ([]dht.Addr, error) {
-		return startingNodes, nil
+		return uniqueStartingNodes(append(startingNodes, localNodeAddr)), nil
 	}
+
 	node, err := dht.NewServer(dhtConf)
 	if err != nil {
-		log.Errorf("error creating dht Node: %v", err)
+		log.Errorf("error creating dht node: %v", err)
 		return nil, err
 	}
 	log.Infof("created dht server with id %+v", node.ID())
@@ -94,34 +99,65 @@ func New(
 		onNewPeerReceived: onNewPeerReceived,
 		stats:             stats,
 		peerPort:          peerPort,
-		nodeAddr:          nodeAddr,
+		nodeAddr:          localNodeAddr,
 	}
-	dhtNode.announceAndGetPeers()
+	go dhtNode.announceLoop()
 	return &dhtNode, nil
+}
+
+func uniqueStartingNodes(nodes []dht.Addr) []dht.Addr {
+	// filter duplicates
+	nodesMap := make(map[string]dht.Addr)
+	for _, n := range nodes {
+		nodesMap[n.String()] = n
+	}
+
+	uniqueNodes := make([]dht.Addr, 0)
+	for _, v := range nodesMap {
+		uniqueNodes = append(uniqueNodes, v)
+	}
+
+	return uniqueNodes
 }
 
 func (d *DhtNode) Port() *uint16 {
 	if d != nil {
 		return nil
 	}
-	port := uint16(d.nodeAddr.Port)
+	port := uint16(d.nodeAddr.Port())
 	return &port
 }
 
+// announce every 15 min to make sure we do not become questionable to other nodes and to get fresh peers
+func (d *DhtNode) announceLoop() {
+	ps, err := d.announceAndGetPeers()
+	if err != nil {
+		log.Error(err)
+	}
+
+	ticker := time.NewTicker(15 * time.Minute)
+	for range ticker.C {
+		if ps != nil {
+			ps.Close()
+		}
+		ps, err = d.announceAndGetPeers()
+		if err != nil {
+			log.Error(err)
+		}
+	}
+}
+
 // announceAndGetPeers get peers via DHT and announce presence
-func (d *DhtNode) announceAndGetPeers() {
+func (d *DhtNode) announceAndGetPeers() (*dht.Announce, error) {
 	log.Info("announcing via dht")
 	atomic.AddUint32(&d.stats.numberOfAnnounces, 1)
-	if d.peersStream != nil {
-		d.peersStream.Close()
-	}
 	ps, err := d.Node.Announce(d.infoHash, int(d.peerPort), false)
 	if err != nil {
 		log.Error(err)
-		return
+		return nil, err
 	}
-	d.peersStream = ps
-	go d.consumePeers()
+	go d.consumePeers(ps)
+	return ps, nil
 }
 
 func convertPeer(peer dht.Peer) peers.Peer {
@@ -131,13 +167,18 @@ func convertPeer(peer dht.Peer) peers.Peer {
 	}
 }
 
-func (d *DhtNode) consumePeers() {
-	for v := range d.peersStream.Peers {
+func (d *DhtNode) consumePeers(peerStream *dht.Announce) {
+	for v := range peerStream.Peers {
 		for _, cp := range v.Peers {
 			atomic.AddUint32(&d.stats.receivedPeers, 1)
 			if cp.Port == 0 {
 				atomic.AddUint32(&d.stats.blockedPeers, 1)
 				atomic.AddUint32(&d.stats.zeroPortsReceived, 1)
+				continue
+			}
+			if cp.IP.Equal(d.nodeAddr.IP()) && cp.IA.Equal(d.nodeAddr.IA()) {
+				atomic.AddUint32(&d.stats.blockedPeers, 1)
+				atomic.AddUint32(&d.stats.recievedSelf, 1)
 				continue
 			}
 			d.onNewPeerReceived(convertPeer(cp))
@@ -146,14 +187,10 @@ func (d *DhtNode) consumePeers() {
 }
 
 func (d *DhtNode) Close() {
-	if d.peersStream != nil {
-		d.peersStream.Close()
-	}
 	d.PrintStats()
 	d.Node.Close()
 }
 
 func (d *DhtNode) PrintStats() {
-	log.Printf("Announced %d times, recieved %d peers, blocked %d peers, blocked 0-port %d peers",
-		d.stats.numberOfAnnounces, d.stats.receivedPeers, d.stats.blockedPeers, d.stats.zeroPortsReceived)
+	log.Printf("Stats %+v", d.stats)
 }

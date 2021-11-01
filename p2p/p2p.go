@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
 	"net"
 
 	"github.com/netsys-lab/dht"
@@ -359,10 +358,10 @@ func (t *Torrent) Download() ([]byte, error) {
 	return buf, nil
 }
 
-func (t *Torrent) EnableDht(addr *net.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
+func (t *Torrent) EnableDht(addr *snet.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
 	node, err := dht_node.New(addr, infoHash, startingNodes, peerPort, func(peer peers.Peer) {
 		peerKnown := t.hasPeer(peer)
-		log.Printf("received peer via dht: %s, peer already known: %t \n", peer, peerKnown)
+		log.Infof("received peer via dht: %s, peer already known: %t", peer, peerKnown)
 		t.PeerSet.Add(peer)
 		if !peerKnown { // dont start two worker for same peer
 			go t.startDownloadWorker(peer)

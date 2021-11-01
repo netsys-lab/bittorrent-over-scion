@@ -12,7 +12,7 @@ require (
 	github.com/jackpal/bencode-go v1.0.0
 	github.com/lucas-clemente/quic-go v0.21.1
 	github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f
-	github.com/netsys-lab/dht v0.1.8
+	github.com/netsys-lab/dht v0.1.10
 	github.com/netsys-lab/scion-path-discovery v0.0.0-20211021094322-7cee7191c808
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/prometheus/common v0.29.0 // indirect

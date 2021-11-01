@@ -591,8 +591,8 @@ github.com/netsec-ethz/scion-apps v0.3.0/go.mod h1:IZ5cXZZ5wfTeXfDQOZV0oRQ7T6VJB
 github.com/netsec-ethz/scion-apps v0.3.0/go.mod h1:IZ5cXZZ5wfTeXfDQOZV0oRQ7T6VJBt5bfyjhdyo8DkE=
 github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f h1:TElJhHXnF7iT/gqxRam4JOWXijAzhpYBC9qWHawxJCY=
 github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f/go.mod h1:38N/jVYtBJsjCyztk+vqAcXpzEgJMirmSGzB7w4oCGQ=
-github.com/netsys-lab/dht v0.1.8 h1:R8CiIrL7CRJt1TdxKP8lq5nkZbbfORewEvUk8dOahE4=
-github.com/netsys-lab/dht v0.1.8/go.mod h1:6QHwOc+4cUK+PO9spTWjSUHT5eYHKgVAmCbDjPYinzU=
+github.com/netsys-lab/dht v0.1.10 h1:tfpXFKcb7PYYmceH9uUmv26Tm1f6sIGgCnzwplkohnk=
+github.com/netsys-lab/dht v0.1.10/go.mod h1:6QHwOc+4cUK+PO9spTWjSUHT5eYHKgVAmCbDjPYinzU=
 github.com/netsys-lab/scion-path-discovery v0.0.0-20211021094322-7cee7191c808 h1:Y8+IRY29TFhqJLZSngVbSf6nKDmXxl3Wxr9H/yoLvfI=
 github.com/netsys-lab/scion-path-discovery v0.0.0-20211021094322-7cee7191c808/go.mod h1:w/hhxTXo77tGESkZtC7U5axwRF13LoSFLHw5ueug1wY=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=

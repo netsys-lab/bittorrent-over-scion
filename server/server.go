@@ -83,9 +83,14 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	}
 
 	if discoveryConfig.EnableDht {
-		nodeAddr := *localAddr.Host
-		nodeAddr.Port = int(discoveryConfig.DhtPort)
-
+		nodeAddr := snet.UDPAddr{
+			IA: localAddr.IA,
+			Host: &net.UDPAddr{
+				IP:   localAddr.Host.IP,
+				Port: int(discoveryConfig.DhtPort),
+				Zone: localAddr.Host.Zone,
+			},
+		}
 		startingNodes := append(torrentFile.Nodes, discoveryConfig.DhtNodes...)
 		node, err := dht_node.New(&nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
 			log.Infof("received peer via dht: %s, peer already known: %t", peer, s.hasPeer(peer))

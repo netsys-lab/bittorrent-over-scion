@@ -93,11 +93,10 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 	}
 
 	if pc.EnableDht {
-		peerAddr, err := snet.ParseUDPAddr(local)
-		peerPort := uint16(peerAddr.Host.Port)
-		nodeAddr := *peerAddr
+		nodeAddr, err := snet.ParseUDPAddr(local)
+		peerPort := uint16(nodeAddr.Host.Port)
 		nodeAddr.Host.Port = int(pc.DhtPort)
-		torrent.DhtNode, err = torrent.EnableDht(nodeAddr.Host, peerPort, t.InfoHash, append(t.Nodes, pc.DhtNodes...))
+		torrent.DhtNode, err = torrent.EnableDht(nodeAddr, peerPort, t.InfoHash, append(t.Nodes, pc.DhtNodes...))
 		if err != nil {
 			log.Println("could not enable dht")
 		}
