@@ -1,6 +1,6 @@
-# torrent-client
+# BitTorrent over SCION
 
-Tiny BitTorrent client written in Go. Uses SCION under the hood with the [pathdiscovery](https://github.com/netsys-lab/scion-path-discovery) libary.
+BitTorrent client written in Go. Uses SCION's pathawarenss with the [pathdiscovery](https://github.com/netsys-lab/scion-path-discovery) libary.
 
 ## Install
 
