@@ -5,7 +5,7 @@ BitTorrent client written in Go. Uses SCION's pathawarenss with the [pathdiscove
 ## Install
 
 ```sh
-go get github.com/martenwallewein/torrent-client
+go get github.com/netsys-lab/bittorrent-over-scion
 ```
 
 ## Usage
