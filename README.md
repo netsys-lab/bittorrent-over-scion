@@ -17,12 +17,12 @@ Furthermore, you need valid TLS certificates (used by [quic-go](https://github.c
 
 ### Run a seeder
 ```sh
-SCION_CERT_KEY_FILE=key.pem SCION_CERT_FILE=cert.pem ./torrent-client -inPath='5G_1.torrent' -outPath='5G.file' -peer="19-ffaa:1:111,[127.0.0.1]:43000" -seed=true -file=5G.file -local="19-ffaa:1:000,[127.0.0.1]:46000"
+SCION_CERT_KEY_FILE=key.pem SCION_CERT_FILE=cert.pem ./torrent-client -inPath='5G_1.torrent' -outPath='5G.file' -peer="19-ffaa:1:111,[127.0.0.1]:43000" -seed=true -file=5G.file -local="19-ffaa:1:000,[127.0.0.1]:46000" -numPaths=1
 ```
 
 ### Run a leecher
 ```
-SCION_CERT_KEY_FILE=key.pem SCION_CERT_FILE=cert.pem ./torrent-client -inPath='5G_1.torrent' -outPath='ubuntu.file' -peer="19-ffaa:1:c3f,[127.0.0.1]:43000" -seed=false -file='5G.file' -local="19-ffaa:1:111,[127.0.0.1]:43000"
+SCION_CERT_KEY_FILE=key.pem SCION_CERT_FILE=cert.pem ./torrent-client -inPath='5G_1.torrent' -outPath='ubuntu.file' -peer="19-ffaa:1:c3f,[127.0.0.1]:43000" -seed=false -file='5G.file' -local="19-ffaa:1:111,[127.0.0.1]:43000" -numPaths=1
 ```
 
 ## Limitations
