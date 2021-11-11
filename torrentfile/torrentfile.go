@@ -55,11 +55,11 @@ type bencodeTorrent struct {
 // This function leeches all pieces of a torrent but never starts seeding. When DHT is enabled in the
 // PeerDiscoveryConfig, the peer will still announce its presence to receive other peers. We therefore announces our
 // presence on a port we are not listening to.
-func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pathSelectionResponsibility string, pc *config.PeerDiscoveryConfig) error {
+func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pathSelectionResponsibility string, pc *config.PeerDiscoveryConfig) (*p2p.Torrent, error) {
 	var peerID [20]byte
 	_, err := rand.Read(peerID[:])
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	targetPeers := peers.NewPeerSet(0)
@@ -105,11 +105,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 
 	buf, err := torrent.Download()
 	if err != nil {
-		return err
-	}
-
-	if torrent.DhtNode != nil {
-		torrent.DhtNode.Close()
+		return nil, err
 	}
 
 	if t.PrintMetrics {
@@ -122,15 +118,15 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 	log.Infof("Writing output file %s", path)
 	outFile, err := os.Create(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer outFile.Close()
 	_, err = outFile.Write(buf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.Infof("Done writing output file, download complete")
-	return nil
+	return &torrent, nil
 }
 
 // Open parses a torrent file
