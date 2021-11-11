@@ -270,20 +270,18 @@ func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
 		return err
 	}
 
-	if s.discoveryConfig.EnableDht && s.dhtNode != nil && hs.DhtSupport {
-		defer func() {
-			log.Info("sending ping")
-			_, err := conn.Write(message.FormatPort(s.discoveryConfig.DhtPort).Serialize())
-			if err != nil {
-				log.Error("error sending ping")
-			}
-		}()
-	}
-
 	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
 	_, err = conn.Write(msg.Serialize())
 	if err != nil {
 		return err
+	}
+
+	if s.discoveryConfig.EnableDht && s.dhtNode != nil && hs.DhtSupport {
+		log.Info("sending PORT msg")
+		_, err := conn.Write(message.FormatPort(s.discoveryConfig.DhtPort).Serialize())
+		if err != nil {
+			log.Error("error sending PORT msg")
+		}
 	}
 
 	return nil

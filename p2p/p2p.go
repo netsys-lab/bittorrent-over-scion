@@ -22,8 +22,11 @@ import (
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 )
 
+// KiB number of bytes of a kibibyte
+const KiB = 1024
+
 // MaxBlockSize is the largest number of bytes a request can ask for
-const MaxBlockSize = 16384
+const MaxBlockSize = 256 * KiB
 
 // MaxBacklog is the number of unfulfilled requests a client can have in its pipeline
 const MaxBacklog = 5
@@ -133,10 +136,11 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 		// If unchoked, send requests until we have enough unfulfilled requests
 		if !state.client.Choked {
 			for state.backlog < MaxBacklog && state.requested < pw.length {
-				blockSize := MaxBlockSize
+				blockSize := min(MaxBlockSize, pw.length)
 				// Last block might be shorter than the typical block
-				if pw.length-state.requested < blockSize {
-					blockSize = pw.length - state.requested
+				bytesDue := pw.length - state.requested
+				if bytesDue < blockSize {
+					blockSize = bytesDue
 				}
 				err := c.SendRequest(pw.index, state.requested, blockSize)
 				if err != nil {
@@ -154,6 +158,13 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 	}
 
 	return state.buf, nil
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func checkIntegrity(pw *pieceWork, buf []byte) error {
