@@ -214,6 +214,7 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			}
 		case message.MsgRequest:
 			index, begin, length := message.ParseRequest(msg)
+			log.Debugf("got request for piece %d", index)
 			if !waitForHandshake {
 				fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
 			}

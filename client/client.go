@@ -189,7 +189,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 			return nil, err
 		}
 
-		log.Debugf("Completed handshake over conn %p\n", v)
+		log.Debugf("Completed handshake over conn %p", v)
 		bf, err = recvBitfield(v)
 		if err != nil {
 			mpSock.UnderlaySocket.CloseAll()
