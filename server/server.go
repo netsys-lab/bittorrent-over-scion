@@ -113,6 +113,7 @@ func (s *Server) ListenHandshake() error {
 	}
 	startPort := s.DialBackStartPort
 	for {
+		log.Info("waiting for MPPeer socket connect")
 		remote, err := mpListener.WaitForMPPeerSockConnect()
 		if err != nil {
 			return err

@@ -67,7 +67,7 @@ func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
 
-	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
+	log.Infof("Input %s, Output %s, Peer %s, seed %t, file %s", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
 

@@ -185,7 +185,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash, t.DiscoveryConfig, t.DhtNode)
 		if err != nil {
 			log.Error(err)
-			log.Errorf("Could not handshake with %s. Disconnecting\n", peer)
+			log.Errorf("Could not handshake with %s. Disconnecting", peer)
 			return
 		}
 		go func() {
