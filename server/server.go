@@ -83,16 +83,11 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	}
 
 	if discoveryConfig.EnableDht {
-		nodeAddr := snet.UDPAddr{
-			IA: localAddr.IA,
-			Host: &net.UDPAddr{
-				IP:   localAddr.Host.IP,
-				Port: int(discoveryConfig.DhtPort),
-				Zone: localAddr.Host.Zone,
-			},
-		}
+		nodeAddr := localAddr.Copy()
+		nodeAddr.Host.Port = int(discoveryConfig.DhtPort)
+
 		startingNodes := append(torrentFile.Nodes, discoveryConfig.DhtNodes...)
-		node, err := dht_node.New(&nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
+		node, err := dht_node.New(nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
 			log.Infof("received peer via dht: %s, peer already known: %t", peer, s.hasPeer(peer))
 			s.peers.Add(peer)
 		})
@@ -245,17 +240,11 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 				log.Error("could not parse port message")
 				break
 			}
-			remoteDht := snet.UDPAddr{
-				IA: remote.IA,
-				Host: &net.UDPAddr{
-					IP:   remote.Host.IP,
-					Port: int(remoteDhtPort),
-					Zone: remote.Host.Zone,
-				},
-			}
+			remoteDht := remote.Copy()
+			remoteDht.Host.Port = int(remoteDhtPort)
 			log.Debugf("sending dht ping to %s",
 				remoteDht)
-			go s.dhtNode.Node.Ping(&remoteDht)
+			go s.dhtNode.Node.Ping(remoteDht)
 		}
 	}
 }
