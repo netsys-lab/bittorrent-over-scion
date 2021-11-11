@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
-
-	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
@@ -20,6 +19,7 @@ import (
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/netsys-lab/scion-path-discovery/socket"
 
+	"github.com/phayes/freeport"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 )
@@ -142,9 +142,13 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 		return nil, err
 	}
 
+	localSocketAddr, err := snet.ParseUDPAddr(local)
+	localSocketAddr.Host.Port, _ = freeport.GetFreePort()
+	localSocketAddrStr := localSocketAddr.String()
+
 	sel := ClientInitiatedSelection{}
-	log.Debugf("Dialing from %s to %s", local, address)
-	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
+	log.Debugf("Dialing from %s to %s", localSocketAddrStr, address)
+	mpSock := smp.NewMPPeerSock(localSocketAddrStr, address, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
 		MultiportMode:               true,

@@ -591,8 +591,6 @@ github.com/netsec-ethz/scion-apps v0.3.0/go.mod h1:IZ5cXZZ5wfTeXfDQOZV0oRQ7T6VJB
 github.com/netsec-ethz/scion-apps v0.3.0/go.mod h1:IZ5cXZZ5wfTeXfDQOZV0oRQ7T6VJBt5bfyjhdyo8DkE=
 github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f h1:TElJhHXnF7iT/gqxRam4JOWXijAzhpYBC9qWHawxJCY=
 github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f/go.mod h1:38N/jVYtBJsjCyztk+vqAcXpzEgJMirmSGzB7w4oCGQ=
-github.com/netsys-lab/dht v0.1.10 h1:tfpXFKcb7PYYmceH9uUmv26Tm1f6sIGgCnzwplkohnk=
-github.com/netsys-lab/dht v0.1.10/go.mod h1:6QHwOc+4cUK+PO9spTWjSUHT5eYHKgVAmCbDjPYinzU=
 github.com/netsys-lab/dht v0.1.11 h1:DR4gRTYy9RQGwS77mOGO7PKsoCSX+7+pAiHkGmYT+bg=
 github.com/netsys-lab/dht v0.1.11/go.mod h1:6QHwOc+4cUK+PO9spTWjSUHT5eYHKgVAmCbDjPYinzU=
 github.com/netsys-lab/scion-path-discovery v0.0.0-20211021094322-7cee7191c808 h1:Y8+IRY29TFhqJLZSngVbSf6nKDmXxl3Wxr9H/yoLvfI=
@@ -642,6 +640,8 @@ github.com/pelletier/go-toml v1.8.1-0.20200708110244-34de94e6a887/go.mod h1:T2/B
 github.com/pelletier/go-toml v1.9.3 h1:zeC5b1GviRUyKYd6OJPvBU/mcVDVoL1OhT17FCt5dSQ=
 github.com/pelletier/go-toml v1.9.3/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
 github.com/performancecopilot/speed v3.0.0+incompatible/go.mod h1:/CLtqpZ5gBg1M9iaPbIdPPGyKcA8hKdoy6hAWba7Yac=
+github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2 h1:JhzVVoYvbOACxoUmOs6V/G4D5nPVUW73rKvXxP4XUJc=
+github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2/go.mod h1:iIss55rKnNBTvrwdmkUpLnDpZoAHvWaiq5+iMmen4AE=
 github.com/philhofer/fwd v1.0.0/go.mod h1:gk3iGcWd9+svBvR0sR+KPcfE+RNWozjowpeBVG3ZVNU=
 github.com/philhofer/fwd v1.1.1 h1:GdGcTjf5RNAxwS4QLsiMzJYj5KEvPJD3Abr261yRQXQ=
 github.com/philhofer/fwd v1.1.1/go.mod h1:gk3iGcWd9+svBvR0sR+KPcfE+RNWozjowpeBVG3ZVNU=
