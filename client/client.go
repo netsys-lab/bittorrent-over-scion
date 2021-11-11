@@ -87,13 +87,11 @@ func completeHandshake(
 		return nil, fmt.Errorf("Expected infohash %x but got %x", res.InfoHash, infohash)
 	}
 	if res.DhtSupport && discoveryConfig.EnableDht {
-		defer func() {
-			log.Info("sending ping")
-			_, err = conn.Write(message.FormatPort(discoveryConfig.DhtPort).Serialize())
-			if err != nil {
-				log.Errorf("error sending ping")
-			}
-		}()
+		log.Info("sending PORT msg")
+		_, err = conn.Write(message.FormatPort(discoveryConfig.DhtPort).Serialize())
+		if err != nil {
+			log.Errorf("error sending PORT msg")
+		}
 	}
 	return res, nil
 }
