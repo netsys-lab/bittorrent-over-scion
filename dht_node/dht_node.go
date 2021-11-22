@@ -14,7 +14,6 @@ import (
 	"github.com/netsec-ethz/scion-apps/pkg/appnet"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/dht"
-	"github.com/netsys-lab/dht/krpc"
 	peerStore "github.com/netsys-lab/dht/peer-store"
 )
 
@@ -28,11 +27,10 @@ type DhtNode struct {
 }
 
 type dhtStats struct {
-	receivedPeers     uint32
-	blockedPeers      uint32
-	recievedSelf      uint32
-	numberOfAnnounces uint32
-	zeroPortsReceived uint32
+	announcesHandled             uint32
+	blockedPeers                 uint32
+	receivedPeersWhileTraversing uint32
+	announcesStarted             uint32
 }
 
 // New creates a new DHT Node.
@@ -67,23 +65,16 @@ func New(
 		copy(infoH[:], infoHash.Bytes())
 		if torrentInfoHash != infoH || !portOk || port == 0 {
 			atomic.AddUint32(&stats.blockedPeers, 1)
-			if port == 0 {
-				atomic.AddUint32(&stats.zeroPortsReceived, 1)
-			}
 			log.Infof("rejected peer %s - %s - %d - %t", infoHash, scionAddr, port, portOk)
 			return
 		}
-
-		dhtConf.PeerStore.AddPeer(infoHash, krpc.NodeAddr{
-			IP:   scionAddr.Host.IP,
-			Port: port,
-			IA:   scionAddr.IA,
-		})
-		atomic.AddUint32(&stats.receivedPeers, 1)
+		atomic.AddUint32(&stats.announcesHandled, 1)
 	}
 
 	dhtConf.StartingNodes = func() ([]dht.Addr, error) {
-		return uniqueStartingNodes(append(startingNodes, localNodeAddr)), nil
+		nodes := uniqueStartingNodes(append(startingNodes, localNodeAddr))
+		log.Tracef("unique starting nodes %+v", nodes)
+		return nodes, nil
 	}
 
 	node, err := dht.NewServer(dhtConf)
@@ -156,7 +147,7 @@ func (d *DhtNode) announceLoop() {
 // announceAndGetPeers get peers via DHT and announce presence
 func (d *DhtNode) announceAndGetPeers() (*dht.Announce, error) {
 	log.Info("announcing via dht")
-	atomic.AddUint32(&d.stats.numberOfAnnounces, 1)
+	atomic.AddUint32(&d.stats.announcesStarted, 1)
 	ps, err := d.Node.Announce(d.infoHash, int(d.peerPort), false)
 	if err != nil {
 		log.Error(err)
@@ -179,15 +170,15 @@ func (d *DhtNode) consumePeers(peerStream *dht.Announce) {
 		log.Infof("handling %+v", v)
 		for _, cp := range v.Peers {
 			log.Infof("handling cp %+v", cp)
-			atomic.AddUint32(&d.stats.receivedPeers, 1)
+			atomic.AddUint32(&d.stats.receivedPeersWhileTraversing, 1)
 			if cp.Port == 0 {
+				log.Info("received zero port peer during announcing")
 				atomic.AddUint32(&d.stats.blockedPeers, 1)
-				atomic.AddUint32(&d.stats.zeroPortsReceived, 1)
 				continue
 			}
 			if cp.IP.Equal(d.nodeAddr.IP()) && cp.IA.Equal(d.nodeAddr.IA()) {
+				log.Info("received self during announcing")
 				atomic.AddUint32(&d.stats.blockedPeers, 1)
-				atomic.AddUint32(&d.stats.recievedSelf, 1)
 				continue
 			}
 			d.onNewPeerReceived(convertPeer(cp))

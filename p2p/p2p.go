@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
-	"sync"
 	"time"
 	"net"
 
@@ -372,16 +371,12 @@ func (t *Torrent) Download() ([]byte, error) {
 }
 
 func (t *Torrent) EnableDht(addr *snet.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
-	startingPeerLock := sync.Mutex{}
 	node, err := dht_node.New(addr, infoHash, startingNodes, peerPort, func(peer peers.Peer) {
 		peerKnown := t.hasPeer(peer)
 		log.Infof("received peer via dht: %s, peer already known: %t", peer, peerKnown)
 		t.PeerSet.Add(peer)
 		if !peerKnown { // dont start two worker for same peer
-			startingPeerLock.Lock()
 			go t.startDownloadWorker(peer)
-			time.Sleep(100 * time.Millisecond)
-			startingPeerLock.Unlock()
 		}
 	})
 	return node, err
