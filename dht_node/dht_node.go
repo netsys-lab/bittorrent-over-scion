@@ -1,4 +1,6 @@
 package dht_node
+// SPDX-FileCopyrightText:  2019 NetSys Lab
+// SPDX-License-Identifier: GPL-3.0-only
 
 import (
 	dhtlog "github.com/anacrolix/log" // logger for dht Node

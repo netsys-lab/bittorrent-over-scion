@@ -1,4 +1,6 @@
 module github.com/martenwallewein/torrent-client
+// SPDX-FileCopyrightText:  2019 NetSys Lab
+// SPDX-License-Identifier: GPL-3.0-only
 
 go 1.16
 

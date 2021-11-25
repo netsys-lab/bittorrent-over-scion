@@ -1,4 +1,6 @@
 package message
+// SPDX-FileCopyrightText:  2019 NetSys Lab
+// SPDX-License-Identifier: GPL-3.0-only
 
 import (
 	"testing"
