@@ -5,14 +5,15 @@ package client
 import (
 	"bytes"
 	"fmt"
-	"github.com/martenwallewein/torrent-client/config"
-	"github.com/martenwallewein/torrent-client/dht_node"
 	"time"
 
-	"github.com/martenwallewein/torrent-client/bitfield"
-	"github.com/martenwallewein/torrent-client/handshake"
-	"github.com/martenwallewein/torrent-client/message"
-	"github.com/martenwallewein/torrent-client/peers"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
+
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
+	"github.com/netsys-lab/bittorrent-over-scion/handshake"
+	"github.com/netsys-lab/bittorrent-over-scion/message"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"

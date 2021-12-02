@@ -3,17 +3,18 @@ package dht_node
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
+	"net"
+	"sync/atomic"
+
 	dhtlog "github.com/anacrolix/log" // logger for dht Node
 	"github.com/anacrolix/torrent/metainfo"
-	"github.com/martenwallewein/torrent-client/peers"
 	"github.com/netsec-ethz/scion-apps/pkg/appnet"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/dht/krpc"
 	peer_store "github.com/netsys-lab/dht/peer-store"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
-	"net"
-	"sync/atomic"
 )
 
 type DhtNode struct {

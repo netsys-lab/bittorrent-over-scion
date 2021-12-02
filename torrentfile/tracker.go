@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/martenwallewein/torrent-client/peers"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
 
 	"github.com/jackpal/bencode-go"
 )
