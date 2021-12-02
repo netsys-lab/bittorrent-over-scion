@@ -1,15 +1,16 @@
 package main
 
 import (
+	"io/ioutil"
+
 	"github.com/anacrolix/tagflag"
 	"github.com/netsys-lab/dht"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
-	"io/ioutil"
 
-	"github.com/martenwallewein/torrent-client/config"
-	"github.com/martenwallewein/torrent-client/server"
-	"github.com/martenwallewein/torrent-client/torrentfile"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/server"
+	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 )
 
 var flags = struct {
@@ -26,12 +27,14 @@ var flags = struct {
 	EnableDht                   bool
 	DhtPort                     int
 	DhtBootstrapAddr            string
+	PrintMetrics                bool
 }{
 	Seed:                        false,
 	PathSelectionResponsibility: "server",
 	NumPaths:                    1,
 	DialBackStartPort:           45000,
 	LogLevel:                    "INFO",
+	PrintMetrics:                false,
 }
 
 func setLogging(loglevel string) {
@@ -79,7 +82,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	tf.PrintMetrics = flags.PrintMetrics
 	if flags.Seed {
 		log.Info("Loading file to RAM...")
 		tf.Content, err = ioutil.ReadFile(flags.File)

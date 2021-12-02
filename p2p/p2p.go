@@ -4,18 +4,21 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
+	"sync"
 	"time"
 
-	"github.com/netsys-lab/dht"
-	"github.com/scionproto/scion/go/lib/snet"
-	log "github.com/sirupsen/logrus"
 	"net"
 
-	"github.com/martenwallewein/torrent-client/client"
-	"github.com/martenwallewein/torrent-client/config"
-	"github.com/martenwallewein/torrent-client/dht_node"
-	"github.com/martenwallewein/torrent-client/message"
-	"github.com/martenwallewein/torrent-client/peers"
+	"github.com/netsys-lab/dht"
+	"github.com/netsys-lab/scion-path-discovery/packets"
+	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/netsys-lab/bittorrent-over-scion/client"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
+	"github.com/netsys-lab/bittorrent-over-scion/message"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
 )
 
 // MaxBlockSize is the largest number of bytes a request can ask for
@@ -26,6 +29,7 @@ const MaxBacklog = 5
 
 // Torrent holds data required to download a torrent from a list of peers
 type Torrent struct {
+	sync.Mutex
 	PeerSet                     peers.PeerSet
 	PeerID                      [20]byte
 	InfoHash                    [20]byte
@@ -35,6 +39,7 @@ type Torrent struct {
 	Name                        string
 	Local                       string
 	PathSelectionResponsibility string
+	Conns                       []packets.UDPConn
 	DhtNode                     *dht_node.DhtNode
 	DiscoveryConfig             *config.PeerDiscoveryConfig
 	workQueue                   chan *pieceWork
@@ -206,6 +211,8 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 						clients = append(clients, &c)
 						go func(c *client.Client) {
 							log.Infof("Starting Download from new client")
+							t.Lock()
+							t.Conns = append(t.Conns, c.Conn)
 							c.Handshake()
 							for pw := range t.workQueue {
 								if !c.Bitfield.HasPiece(pw.index) {
@@ -338,9 +345,12 @@ func (t *Torrent) Download() ([]byte, error) {
 		copy(buf[begin:end], res.buf)
 		donePieces++
 
-		// percent := float64(donePieces) / float64(len(t.PieceHashes)) * 100
 		// numWorkers := runtime.NumGoroutine() - 1 // subtract 1 for main thread
-		// log.Printf("(%0.2f%%) Downloaded piece #%d from %d peers\n", percent, res.index, numWorkers)
+		if donePieces%30 == 0 {
+			percent := float64(donePieces) / float64(len(t.PieceHashes)) * 100
+			log.Infof("(%0.2f%%) Downloaded piece #%d from %d", percent, res.index, len(t.PieceHashes))
+		}
+
 	}
 	close(t.workQueue)
 

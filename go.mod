@@ -1,4 +1,4 @@
-module github.com/martenwallewein/torrent-client
+module github.com/netsys-lab/bittorrent-over-scion
 
 go 1.16
 

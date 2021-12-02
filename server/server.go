@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/martenwallewein/torrent-client/bitfield"
-	"github.com/martenwallewein/torrent-client/config"
-	"github.com/martenwallewein/torrent-client/dht_node"
-	"github.com/martenwallewein/torrent-client/handshake"
-	"github.com/martenwallewein/torrent-client/message"
-	"github.com/martenwallewein/torrent-client/peers"
-	"github.com/martenwallewein/torrent-client/torrentfile"
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
+	"github.com/netsys-lab/bittorrent-over-scion/handshake"
+	"github.com/netsys-lab/bittorrent-over-scion/message"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
+	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -196,9 +196,6 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 
 		if msg == nil { // keep-alive
 			return nil
-		}
-		if !waitForHandshake {
-			fmt.Printf("Got message %d\n", msg.ID)
 		}
 
 		switch msg.ID {

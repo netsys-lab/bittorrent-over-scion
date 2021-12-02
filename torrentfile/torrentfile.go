@@ -13,10 +13,11 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/netsys-lab/dht"
+	"github.com/netsys-lab/scion-path-discovery/packets"
 
-	"github.com/martenwallewein/torrent-client/config"
-	"github.com/martenwallewein/torrent-client/p2p"
-	"github.com/martenwallewein/torrent-client/peers"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/p2p"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
 )
 
 // Port to listen on
@@ -24,14 +25,15 @@ const Port uint16 = 6881
 
 // TorrentFile encodes the metadata from a .torrent file
 type TorrentFile struct {
-	Announce    string
-	Nodes       []dht.Addr
-	InfoHash    [20]byte
-	PieceHashes [][20]byte
-	PieceLength int
-	Length      int
-	Name        string
-	Content     []byte
+	Announce     string
+	Nodes        []dht.Addr
+	InfoHash     [20]byte
+	PieceHashes  [][20]byte
+	PieceLength  int
+	Length       int
+	Name         string
+	Content      []byte
+	PrintMetrics bool
 }
 
 type bencodeInfo struct {
@@ -85,6 +87,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 		Local:                       local,
 		PathSelectionResponsibility: pathSelectionResponsibility,
 		DiscoveryConfig:             pc,
+		Conns:                       make([]packets.UDPConn, 0),
 	}
 
 	if pc.EnableDht {
@@ -105,6 +108,13 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 
 	if torrent.DhtNode != nil {
 		torrent.DhtNode.Close()
+	}
+
+	if t.PrintMetrics {
+		// TODO: Implement metrics
+		// for i,v := range torrent.Conns {
+		//	log.Infof("Average download bandwidth ")
+		//}
 	}
 
 	log.Infof("Writing output file %s", path)

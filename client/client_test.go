@@ -5,10 +5,10 @@ import (
 	"net"
 	"testing"
 
-	"github.com/martenwallewein/torrent-client/bitfield"
-	"github.com/martenwallewein/torrent-client/handshake"
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
+	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 
-	"github.com/martenwallewein/torrent-client/message"
+	"github.com/netsys-lab/bittorrent-over-scion/message"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

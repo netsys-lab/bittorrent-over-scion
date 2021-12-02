@@ -2,5 +2,6 @@
 *.torrent
 *.iso
 torrent-client
+bittorrent-over-scion
 bench/
 .idea
