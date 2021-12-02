@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2019 NetSys Lab
+
+SPDX-License-Identifier: GPL-3.0-only
+-->
+
 # BitTorrent over SCION
 
 BitTorrent client written in Go. Uses SCION's pathawareness with the [pathdiscovery](https://github.com/netsys-lab/scion-path-discovery) library.
@@ -35,3 +41,6 @@ SCION_CERT_KEY_FILE=key.pem SCION_CERT_FILE=cert.pem ./torrent-client -inPath='5
 - [ ] Support Dht based peer discovery
 - [ ] Support magnet links
 - [ ] Support multi-file torrents
+
+## License
+This project is licensed under the GPLv3 license. However, for accurate information regarding license and copyrights, please check individual files.
