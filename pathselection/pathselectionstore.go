@@ -1,6 +1,7 @@
 package pathselection
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/scionproto/scion/go/lib/snet"
@@ -40,6 +41,7 @@ func NewPathSelectionStore() *PathSelectionStore {
 func pathsConflict(path1, path2 snet.Path) bool {
 	for _, intP1 := range path1.Metadata().Interfaces {
 		for _, intP2 := range path2.Metadata().Interfaces {
+			fmt.Printf("Comparing %s:%d to %s:%d resulting in %t\n", intP1.IA, intP1.ID, intP2.IA, intP2.ID, intP1.IA.Equal(intP2.IA) && intP1.ID == intP2.ID)
 			if intP1.IA.Equal(intP2.IA) && intP1.ID == intP2.ID {
 				return true
 			}
@@ -69,8 +71,8 @@ func sortPeerPathEntries(entries []PeerPathEntry) []PeerPathEntry {
 	return entries
 }
 
-func updatePeerEntryInStore(entry PeerPathEntry) {
-	PathSelectionStore[entry.PeerAddrStr] = entry
+func (p *PathSelectionStore) updatePeerEntryInStore(entry PeerPathEntry) {
+	p.data[entry.PeerAddrStr] = entry
 }
 
 // TODO: Check the return value, maybe use pointer here...
@@ -80,36 +82,50 @@ func removePathFromEntry(entry PeerPathEntry, pathIndex int) PeerPathEntry {
 }
 
 // Used paths should be empty here...
-func AddPeerEntry(entry PeerPathEntry) {
-	potentialConflictingPeers := make([]PeerPathEntry, len(PathSelectionStore))
-	for _, v := range PathSelectionStore {
+func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
+	potentialConflictingPeers := make([]PeerPathEntry, len(p.data))
+	for _, v := range p.data {
 		potentialConflictingPeers = append(potentialConflictingPeers, v)
 	}
 	potentialConflictingPeers = sortPeerPathEntries(potentialConflictingPeers)
 	for _, path := range entry.AvailablePaths {
+
+		if len(potentialConflictingPeers) == 0 {
+			entry.UsedPaths = append(entry.UsedPaths, path)
+			continue
+		}
+		conflictFound := false
 		for _, targetEntry := range potentialConflictingPeers {
 			conflictingPathIndex := getPeerConflictPaths(path, targetEntry)
 			if conflictingPathIndex >= 0 {
+				fmt.Printf("Removing index %d from len %d\n", conflictingPathIndex, len(potentialConflictingPeers))
 				// Remove path from targetEntry
-				targetEntry = removePathFromEntry(entry, conflictingPathIndex)
+				targetEntry = removePathFromEntry(targetEntry, conflictingPathIndex)
 
 				// Replace targetEntry in map
-				updatePeerEntryInStore(targetEntry)
+				p.updatePeerEntryInStore(targetEntry)
 
 				// Add to our entry
 				entry.UsedPaths = append(entry.UsedPaths, path)
+				conflictFound = true
 				break
 			}
 		}
-		// Update the list, so that we do not steal paths always from the first peer
-		potentialConflictingPeers = filterByMinimumUsedPaths(potentialConflictingPeers, len(entry.UsedPaths))
 
+		if !conflictFound {
+			entry.UsedPaths = append(entry.UsedPaths, path)
+		} else {
+			// Update the list, so that we do not steal paths always from the first peer
+			potentialConflictingPeers = p.filterByMinimumUsedPaths(potentialConflictingPeers, len(entry.UsedPaths))
+		}
 	}
+
+	p.data[entry.PeerAddrStr] = entry
 
 }
 
-func filterByMinimumUsedPaths(entries []PeerPathEntry, minUsedPath int) []PeerPathEntry {
-	newEntries := make([]PeerPathEntry, len(PathSelectionStore))
+func (p *PathSelectionStore) filterByMinimumUsedPaths(entries []PeerPathEntry, minUsedPath int) []PeerPathEntry {
+	newEntries := make([]PeerPathEntry, len(p.data))
 	return newEntries
 }
 
