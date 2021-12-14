@@ -1,4 +1,5 @@
 package server
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -13,6 +14,7 @@ import (
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
 	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
+	ps "github.com/netsys-lab/bittorrent-over-scion/pathselection"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 
@@ -24,6 +26,11 @@ import (
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 )
+
+type ExtPeer struct {
+	sock      *smp.MPPeerSock
+	selection *ServerSelection
+}
 
 // A Client is a TCP connection with a peer
 type Server struct {
@@ -40,17 +47,31 @@ type Server struct {
 	DialBackStartPort int
 	discoveryConfig   *config.PeerDiscoveryConfig
 	dhtNode           *dht_node.DhtNode // dht note controlled by this server
+	pathStore         *ps.PathSelectionStore
+	extPeers          []ExtPeer
 }
 
 //LastSelection users could add more fields
 type ServerSelection struct {
 	lastSelectedPathSet pathselection.PathSet
 	numPaths            int
+	usedPaths           []snet.Path
 }
 
 // We use server-side pathselection, meaning the server connects back to the client
 func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	ps := pathSet.GetPathSmallHopCount(s.numPaths)
+	// ps := pathSet.GetPathSmallHopCount(s.numPaths)
+	// Filter by used paths
+	ps := &pathselection.PathSet{
+		Address: pathSet.Address,
+		Paths:   make([]pathselection.PathQuality, 0),
+	}
+
+	for _, v := range s.usedPaths {
+		pathQualityIndex := pathset.Paths.FindIndexByPathString(pathselection.PathToString(v))
+		ps.Paths = append(ps.Paths, pathSet.Paths[pathQualityIndex])
+	}
+
 	return ps, nil
 }
 
@@ -75,6 +96,8 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 		NumPaths:          numPaths,
 		DialBackStartPort: dialBackPort,
 		discoveryConfig:   discoveryConfig,
+		pathStore:         ps.NewPathSelectionStore(),
+		extPeers:          make([]ExtPeer, 0),
 	}
 
 	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
@@ -98,6 +121,31 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	}
 
 	return s, nil
+}
+
+func (s *Server) updateDisjointPathselection(p ExtPeer) {
+	// Create a PeerPathEntry, add it to the store
+	// Beforehand, fill available paths
+	s.extPeers = append(s.extPeers, p)
+	pp := ps.PeerPathEntry{
+		PeerAddrStr:    p.sock.Peer.String(),
+		PeerAddr:       *p.sock.Peer,
+		AvailablePaths: make([]snet.Path, 0), // TODO: Get available paths from socket
+		UsedPaths:      make([]snet.Path, 0),
+	}
+
+	s.pathStore.AddPeerEntry(pp)
+
+	for _, v := range s.extPeers {
+		// After adding, we get the used Paths, which we save in the selection
+		// We need a unique identifier for paths to map them to PathQualities
+		paths := s.pathStore.Get(v.sock.Peer.String()).UsedPaths
+		v.selection.usedPaths = paths
+
+		// Update pathselection in socket
+		v.sock.ForcePathSelection()
+	}
+
 }
 
 func (s *Server) ListenHandshake() error {
@@ -136,6 +184,9 @@ func (s *Server) ListenHandshake() error {
 				return
 			}
 			log.Debugf("Connecting to %s", remote.String())
+			// TODO: We need to make this server selection editable
+			// And maybe we need a method to force pathselection being done
+			// (And a method to get all available paths)
 			err = mpSock.Connect(&ServerSelection{
 				numPaths: s.NumPaths,
 			}, &socket.ConnectOptions{

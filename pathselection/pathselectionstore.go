@@ -83,6 +83,10 @@ func sortPeerPathEntries(entries []PeerPathEntry) []PeerPathEntry {
 	return entries
 }
 
+func (p *PathSelectionStore) Get(id string) PeerPathEntry {
+	return p.data[id]
+}
+
 func (p *PathSelectionStore) updatePeerEntryInStore(entry PeerPathEntry) {
 	p.data[entry.PeerAddrStr] = entry
 }
