@@ -61,6 +61,18 @@ func getPeerConflictPaths(path snet.Path, peer PeerPathEntry) int {
 	return -1
 }
 
+func getConflictFreePaths(peer PeerPathEntry) []snet.Path {
+	paths := make([]snet.Path, 0)
+	for _, p1 := range peer.UsedPaths {
+		for _, p2 := range paths {
+			if !pathsConflict(p1, p2) {
+				paths = append(paths, p1)
+			}
+		}
+	}
+	return paths
+}
+
 // Sorts descending by the number of paths used
 func sortPeerPathEntries(entries []PeerPathEntry) []PeerPathEntry {
 	// TODO: Avoid in order sorting
@@ -120,6 +132,8 @@ func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
 		}
 	}
 
+	// Filter self containing paths for conflicts
+	entry.UsedPaths = getConflictFreePaths(entry)
 	p.data[entry.PeerAddrStr] = entry
 
 }
