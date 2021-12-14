@@ -68,7 +68,7 @@ func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*
 	}
 
 	for _, v := range s.usedPaths {
-		pathQualityIndex := pathset.Paths.FindIndexByPathString(pathselection.PathToString(v))
+		pathQualityIndex := pathselection.FindIndexByPathString(pathSet.Paths, pathselection.PathToString(v))
 		ps.Paths = append(ps.Paths, pathSet.Paths[pathQualityIndex])
 	}
 

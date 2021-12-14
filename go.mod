@@ -1,4 +1,5 @@
 module github.com/netsys-lab/bittorrent-over-scion
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -17,7 +18,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/prometheus/common v0.29.0 // indirect
-	github.com/scionproto/scion v0.6.0
+	github.com/scionproto/scion v0.6.1-0.20210929154253-764d6e2afe47
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.7.0
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
