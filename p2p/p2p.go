@@ -1,4 +1,5 @@
 package p2p
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -6,8 +7,8 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"fmt"
+	"sync"
 	"time"
-	"net"
 
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"

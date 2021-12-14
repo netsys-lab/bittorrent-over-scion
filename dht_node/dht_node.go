@@ -1,15 +1,16 @@
 package dht_node
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
-	"time"
 	"sync/atomic"
+	"time"
 
-	log "github.com/sirupsen/logrus"
-	dhtlog "github.com/anacrolix/log" // logger for dht Node
+	dhtLog "github.com/anacrolix/log" // logger for dht Node
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/netsec-ethz/scion-apps/pkg/appnet"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
@@ -94,7 +95,7 @@ func New(
 	}
 
 	go func() {
-		dhtNode.Node.Bootstrap()
+		//dhtNode.Node.Bootstrap()
 		go dhtNode.announceLoop()
 	}()
 
