@@ -1,4 +1,5 @@
 package handshake
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -87,7 +88,7 @@ func Read(r io.Reader) (*Handshake, error) {
 		DhtSupport: (reserved[7] & 1) > 0,
 	}
 
-	log.Infof("Received Handshake: %+v", h)
+	log.Debugf("Received Handshake: %+v", h)
 
 	return &h, nil
 }

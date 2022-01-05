@@ -1,4 +1,5 @@
 package client
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -72,7 +73,6 @@ func completeHandshake(
 
 	_, err := conn.Write(req.Serialize())
 
-	// log.Infof("Wrote packet")
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -168,6 +168,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 		DontWaitForIncoming:     true,
 		SendAddrPacket:          true,
 		NoPeriodicPathSelection: true,
+		NoMetricsCollection:     true,
 	})
 
 	if err != nil {

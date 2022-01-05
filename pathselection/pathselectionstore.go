@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/scionproto/scion/go/lib/snet"
+	log "github.com/sirupsen/logrus"
 )
 
 type PeerPathEntry struct {
@@ -64,10 +66,16 @@ func getPeerConflictPaths(path snet.Path, peer PeerPathEntry) int {
 func getConflictFreePaths(peer PeerPathEntry) []snet.Path {
 	paths := make([]snet.Path, 0)
 	for _, p1 := range peer.UsedPaths {
+		pathsConflicted := false
 		for _, p2 := range paths {
-			if !pathsConflict(p1, p2) {
-				paths = append(paths, p1)
+			if pathsConflict(p1, p2) {
+				pathsConflicted = true
+				break
 			}
+		}
+
+		if !pathsConflicted {
+			paths = append(paths, p1)
 		}
 	}
 	return paths
@@ -93,7 +101,9 @@ func (p *PathSelectionStore) updatePeerEntryInStore(entry PeerPathEntry) {
 
 // TODO: Check the return value, maybe use pointer here...
 func removePathFromEntry(entry PeerPathEntry, pathIndex int) PeerPathEntry {
+	log.Warn(entry.UsedPaths)
 	entry.UsedPaths = append(entry.UsedPaths[:pathIndex], entry.UsedPaths[pathIndex+1:]...)
+	log.Warn(entry.UsedPaths)
 	return entry
 }
 
@@ -111,21 +121,33 @@ func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
 			continue
 		}
 		conflictFound := false
-		for _, targetEntry := range potentialConflictingPeers {
+		conflictButPeerHasNotEnoughPaths := false
+		for i, targetEntry := range potentialConflictingPeers {
 			conflictingPathIndex := getPeerConflictPaths(path, targetEntry)
 			if conflictingPathIndex >= 0 {
+
+				if len(targetEntry.UsedPaths) <= len(entry.UsedPaths) {
+					conflictButPeerHasNotEnoughPaths = true
+					break
+				}
+
 				fmt.Printf("Removing index %d from len %d\n", conflictingPathIndex, len(potentialConflictingPeers))
 				// Remove path from targetEntry
 				targetEntry = removePathFromEntry(targetEntry, conflictingPathIndex)
 
 				// Replace targetEntry in map
 				p.updatePeerEntryInStore(targetEntry)
+				potentialConflictingPeers[i] = targetEntry
 
 				// Add to our entry
 				entry.UsedPaths = append(entry.UsedPaths, path)
 				conflictFound = true
 				break
 			}
+		}
+
+		if conflictButPeerHasNotEnoughPaths {
+			continue
 		}
 
 		if !conflictFound {
@@ -143,8 +165,9 @@ func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
 }
 
 func (p *PathSelectionStore) filterByMinimumUsedPaths(entries []PeerPathEntry, minUsedPath int) []PeerPathEntry {
-	newEntries := make([]PeerPathEntry, len(p.data))
-	return newEntries
+	//newEntries := make([]PeerPathEntry, len(p.data))
+	//return newEntries
+	return entries
 }
 
 // ---------------------------- Deprecated ---------------------------------------
