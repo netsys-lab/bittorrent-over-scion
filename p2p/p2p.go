@@ -96,7 +96,6 @@ func (state *pieceProgress) readMessage() error {
 		}
 		state.client.Bitfield.SetPiece(index)
 	case message.MsgPiece:
-		log.Infof("received piece index %d", state.index)
 		n, err := message.ParsePiece(state.index, state.buf, msg)
 		if err != nil {
 			return err
@@ -144,7 +143,6 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 				if bytesDue < blockSize {
 					blockSize = bytesDue
 				}
-				log.Debugf("requesting piece %d, start %d, size %d", pw.index, state.requested, blockSize)
 				err := c.SendRequest(pw.index, state.requested, blockSize)
 				if err != nil {
 					return nil, err

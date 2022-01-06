@@ -6,7 +6,6 @@ package server
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"net"
 
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
@@ -299,11 +298,6 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			}
 		case message.MsgRequest:
 			index, begin, length := message.ParseRequest(msg)
-			log.Debugf("got request for piece %d", index)
-			if !waitForHandshake {
-				fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
-			}
-
 			buf := make([]byte, 8)
 			binary.BigEndian.PutUint32(buf[0:4], uint32(index))
 			binary.BigEndian.PutUint32(buf[4:8], uint32(begin))
