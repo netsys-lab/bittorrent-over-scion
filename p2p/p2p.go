@@ -279,12 +279,12 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 				}
 
 				// fmt.Println(buf[:128])
-				/*err = checkIntegrity(pw, buf)
+				err = checkIntegrity(pw, buf)
 				if err != nil {
 					log.Fatalf("Piece #%d failed integrity check\n", pw.index)
 					t.workQueue <- pw // Put piece back on the queue
 					continue
-				}*/
+				}
 
 				c.SendHave(pw.index)
 				t.results <- &pieceResult{pw.index, buf}
@@ -306,12 +306,12 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 					}
 
 					// fmt.Println(buf[:128])
-					/*err = checkIntegrity(pw, buf)
+					err = checkIntegrity(pw, buf)
 					if err != nil {
 						log.Fatalf("Piece #%d failed integrity check\n", pw.index)
 						t.workQueue <- pw // Put piece back on the queue
 						continue
-					}*/
+					}
 
 					c.SendHave(pw.index)
 					t.results <- &pieceResult{pw.index, buf}
