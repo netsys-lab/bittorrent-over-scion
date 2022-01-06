@@ -33,12 +33,6 @@ func NewPathSelectionStore() *PathSelectionStore {
 	}
 }
 
-// var PathSelectionStore map[string]PeerPathEntry
-
-// func Init() {
-//	PathSelectionStore = make(map[string]PeerPathEntry, 0)
-//}
-
 func pathsConflict(path1, path2 snet.Path) bool {
 	for _, intP1 := range path1.Metadata().Interfaces {
 		for _, intP2 := range path2.Metadata().Interfaces {
@@ -81,7 +75,6 @@ func getConflictFreePaths(peer PeerPathEntry) []snet.Path {
 
 // Sorts descending by the number of paths used
 func sortPeerPathEntries(entries []PeerPathEntry) []PeerPathEntry {
-	// TODO: Avoid in order sorting
 	sort.Slice(entries, func(i, j int) bool {
 		return len(entries[i].UsedPaths) < len(entries[j].UsedPaths)
 	})
@@ -97,7 +90,6 @@ func (p *PathSelectionStore) updatePeerEntryInStore(entry PeerPathEntry) {
 	p.data[entry.PeerAddrStr] = entry
 }
 
-// TODO: Check the return value, maybe use pointer here...
 func removePathFromEntry(entry PeerPathEntry, pathIndex int) PeerPathEntry {
 	log.Warn(entry.UsedPaths)
 	entry.UsedPaths = append(entry.UsedPaths[:pathIndex], entry.UsedPaths[pathIndex+1:]...)
@@ -167,53 +159,3 @@ func (p *PathSelectionStore) filterByMinimumUsedPaths(entries []PeerPathEntry, m
 	//return newEntries
 	return entries
 }
-
-// ---------------------------- Deprecated ---------------------------------------
-
-// How to use
-// We have a new peer with a set of (used and) available paths
-// We call GetConflictingPaths(peer) to get all other peers and potential conflicting paths
-// How to determine which peers to "steal" paths:
-// We sort the result of GetConflictingPaths based on NumPathsInUse. Afterwards, we filter live
-// So that we only have peers that have #usedPath > #curUsedPath of our peer
-// For each of those peers, we "steal" one path and add a path to our peer
-// We support stealing multiple paths by iterating over the list multiple times
-// TODO: Conflicts are not relevant for all paths, but potentially one path per peer?
-
-// Beginning Assumptions:
-// New peer has only 1 path
-// Current Peer has multiple paths
-
-// Calculates all potential conflicting (not disjoint) paths
-/*
-func GetConflictingPaths(entry PeerPathEntry) []ConflictingPathResult {
-
-	return []ConflictingPathResult{}
-}
-
-func sortConflicts([]ConflictingPathResult) {
-
-}
-
-func DoStuff(entry PeerPathEntry) {
-	conflicts := GetConflictingPaths(entry)
-
-	sortConflicts(conflicts)
-
-	for len(conflicts) > 0 {
-		pathsGot := false
-		for i := 0; i < len(conflicts); i++ {
-			if conflicts[i].NumPathsInUse > len(entry.UsedPaths) {
-				// TODO: Steal path here
-				conflicts[i].NumPathsInUse--
-				pathsGot = true
-			}
-		}
-
-		if !pathsGot {
-			break
-		}
-
-	}
-}
-*/
