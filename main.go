@@ -1,9 +1,11 @@
 package main
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
 	"io/ioutil"
+	"time"
 
 	"github.com/anacrolix/tagflag"
 	"github.com/netsys-lab/dht"
@@ -30,6 +32,7 @@ var flags = struct {
 	DhtPort                     int
 	DhtBootstrapAddr            string
 	PrintMetrics                bool
+	KeepAlive                   bool // only effects leecher, testing purpose only TODO: remove
 }{
 	Seed:                        false,
 	PathSelectionResponsibility: "server",
@@ -37,6 +40,7 @@ var flags = struct {
 	DialBackStartPort:           45000,
 	LogLevel:                    "INFO",
 	PrintMetrics:                false,
+	KeepAlive:                   false,
 }
 
 func setLogging(loglevel string) {
@@ -67,7 +71,7 @@ func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
 
-	log.Infof("Input %s, Output %s, Peer %s, seed %s, file %s\n", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
+	log.Infof("Input %s, Output %s, Peer %s, seed %t, file %s", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
 
@@ -109,9 +113,15 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		err = tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility, &peerDiscoveryConfig)
+		t, err := tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility, &peerDiscoveryConfig)
 		if err != nil {
 			log.Fatal(err)
+		}
+		if flags.KeepAlive {
+			time.Sleep(1 * time.Hour)
+		}
+		if t.DhtNode != nil {
+			t.DhtNode.Close()
 		}
 	}
 

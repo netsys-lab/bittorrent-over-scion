@@ -83,11 +83,11 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	}
 
 	if discoveryConfig.EnableDht {
-		nodeAddr := *localAddr.Host
-		nodeAddr.Port = int(discoveryConfig.DhtPort)
+		nodeAddr := localAddr.Copy()
+		nodeAddr.Host.Port = int(discoveryConfig.DhtPort)
 
 		startingNodes := append(torrentFile.Nodes, discoveryConfig.DhtNodes...)
-		node, err := dht_node.New(&nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
+		node, err := dht_node.New(nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
 			log.Infof("received peer via dht: %s, peer already known: %t", peer, s.hasPeer(peer))
 			s.peers.Add(peer)
 		})
@@ -113,6 +113,7 @@ func (s *Server) ListenHandshake() error {
 	}
 	startPort := s.DialBackStartPort
 	for {
+		log.Info("waiting for MPPeer socket connect")
 		remote, err := mpListener.WaitForMPPeerSockConnect()
 		if err != nil {
 			return err
@@ -209,6 +210,7 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			}
 		case message.MsgRequest:
 			index, begin, length := message.ParseRequest(msg)
+			log.Debugf("got request for piece %d", index)
 			if !waitForHandshake {
 				fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
 			}
@@ -239,17 +241,11 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 				log.Error("could not parse port message")
 				break
 			}
-			remoteDht := snet.UDPAddr{
-				IA: remote.IA,
-				Host: &net.UDPAddr{
-					IP:   remote.Host.IP,
-					Port: int(remoteDhtPort),
-					Zone: remote.Host.Zone,
-				},
-			}
+			remoteDht := remote.Copy()
+			remoteDht.Host.Port = int(remoteDhtPort)
 			log.Debugf("sending dht ping to %s",
 				remoteDht)
-			go s.dhtNode.Node.Ping(&remoteDht)
+			go s.dhtNode.Node.Ping(remoteDht)
 		}
 	}
 }
@@ -265,20 +261,18 @@ func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
 		return err
 	}
 
-	if s.discoveryConfig.EnableDht && s.dhtNode != nil && hs.DhtSupport {
-		defer func() {
-			log.Info("sending ping")
-			_, err := conn.Write(message.FormatPort(s.discoveryConfig.DhtPort).Serialize())
-			if err != nil {
-				log.Error("error sending ping")
-			}
-		}()
-	}
-
 	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
 	_, err = conn.Write(msg.Serialize())
 	if err != nil {
 		return err
+	}
+
+	if s.discoveryConfig.EnableDht && s.dhtNode != nil && hs.DhtSupport {
+		log.Info("sending PORT msg")
+		_, err := conn.Write(message.FormatPort(s.discoveryConfig.DhtPort).Serialize())
+		if err != nil {
+			log.Error("error sending PORT msg")
+		}
 	}
 
 	return nil

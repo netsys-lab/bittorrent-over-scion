@@ -1,4 +1,5 @@
 package p2p
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -8,8 +9,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"net"
 
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -23,8 +22,11 @@ import (
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 )
 
+// KiB number of bytes of a kibibyte
+const KiB = 1024
+
 // MaxBlockSize is the largest number of bytes a request can ask for
-const MaxBlockSize = 16384
+const MaxBlockSize = 256 * KiB
 
 // MaxBacklog is the number of unfulfilled requests a client can have in its pipeline
 const MaxBacklog = 5
@@ -93,6 +95,7 @@ func (state *pieceProgress) readMessage() error {
 		}
 		state.client.Bitfield.SetPiece(index)
 	case message.MsgPiece:
+		log.Infof("received piece index %d", state.index)
 		n, err := message.ParsePiece(state.index, state.buf, msg)
 		if err != nil {
 			return err
@@ -134,11 +137,13 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 		// If unchoked, send requests until we have enough unfulfilled requests
 		if !state.client.Choked {
 			for state.backlog < MaxBacklog && state.requested < pw.length {
-				blockSize := MaxBlockSize
+				blockSize := min(MaxBlockSize, pw.length)
 				// Last block might be shorter than the typical block
-				if pw.length-state.requested < blockSize {
-					blockSize = pw.length - state.requested
+				bytesDue := pw.length - state.requested
+				if bytesDue < blockSize {
+					blockSize = bytesDue
 				}
+				log.Debugf("requesting piece %d, start %d, size %d", pw.index, state.requested, blockSize)
 				err := c.SendRequest(pw.index, state.requested, blockSize)
 				if err != nil {
 					return nil, err
@@ -157,6 +162,13 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 	return state.buf, nil
 }
 
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func checkIntegrity(pw *pieceWork, buf []byte) error {
 	hash := sha1.Sum(buf)
 	if !bytes.Equal(hash[:], pw.hash[:]) {
@@ -173,7 +185,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash, t.DiscoveryConfig, t.DhtNode)
 		if err != nil {
 			log.Error(err)
-			log.Errorf("Could not handshake with %s. Disconnecting\n", peer)
+			log.Errorf("Could not handshake with %s. Disconnecting", peer)
 			return
 		}
 		go func() {
@@ -244,7 +256,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 		return
 	}
 
-	log.Infof("Completed handshake with %s, got %d clients\n", peer, len(clients))
+	log.Infof("Completed handshake with %s, got %d clients", peer, len(clients))
 	log.Infof("Starting download...")
 	for i, c := range clients {
 		if i == len(clients)-1 {
@@ -359,10 +371,10 @@ func (t *Torrent) Download() ([]byte, error) {
 	return buf, nil
 }
 
-func (t *Torrent) EnableDht(addr *net.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
+func (t *Torrent) EnableDht(addr *snet.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
 	node, err := dht_node.New(addr, infoHash, startingNodes, peerPort, func(peer peers.Peer) {
 		peerKnown := t.hasPeer(peer)
-		log.Printf("received peer via dht: %s, peer already known: %t \n", peer, peerKnown)
+		log.Infof("received peer via dht: %s, peer already known: %t", peer, peerKnown)
 		t.PeerSet.Add(peer)
 		if !peerKnown { // dont start two worker for same peer
 			go t.startDownloadWorker(peer)

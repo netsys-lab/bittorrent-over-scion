@@ -190,7 +190,7 @@ func (m *Message) name() string {
 	case MsgCancel:
 		return "Cancel"
 	case MsgPort:
-		return "Ping"
+		return "Port"
 	default:
 		return fmt.Sprintf("Unknown#%d", m.ID)
 	}

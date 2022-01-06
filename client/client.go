@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
-
-	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
@@ -20,6 +19,7 @@ import (
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/netsys-lab/scion-path-discovery/socket"
 
+	"github.com/phayes/freeport"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 )
@@ -87,13 +87,11 @@ func completeHandshake(
 		return nil, fmt.Errorf("Expected infohash %x but got %x", res.InfoHash, infohash)
 	}
 	if res.DhtSupport && discoveryConfig.EnableDht {
-		defer func() {
-			log.Info("sending ping")
-			_, err = conn.Write(message.FormatPort(discoveryConfig.DhtPort).Serialize())
-			if err != nil {
-				log.Errorf("error sending ping")
-			}
-		}()
+		log.Info("sending PORT msg")
+		_, err = conn.Write(message.FormatPort(discoveryConfig.DhtPort).Serialize())
+		if err != nil {
+			log.Errorf("error sending PORT msg")
+		}
 	}
 	return res, nil
 }
@@ -144,9 +142,16 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 		return nil, err
 	}
 
+	localSocketAddr, err := snet.ParseUDPAddr(local)
+	if err != nil {
+		return nil, err
+	}
+	localSocketAddr.Host.Port, _ = freeport.GetFreePort()
+	localSocketAddrStr := localSocketAddr.String()
+
 	sel := ClientInitiatedSelection{}
-	log.Debugf("Dialing from %s to %s", local, address)
-	mpSock := smp.NewMPPeerSock(local, address, &smp.MPSocketOptions{
+	log.Debugf("Dialing from %s to %s", localSocketAddrStr, address)
+	mpSock := smp.NewMPPeerSock(localSocketAddrStr, address, &smp.MPSocketOptions{
 		Transport:                   "QUIC",
 		PathSelectionResponsibility: "CLIENT", // TODO: Server
 		MultiportMode:               true,
@@ -191,7 +196,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 			return nil, err
 		}
 
-		log.Debugf("Completed handshake over conn %p\n", v)
+		log.Debugf("Completed handshake over conn %p", v)
 		bf, err = recvBitfield(v)
 		if err != nil {
 			mpSock.UnderlaySocket.CloseAll()
