@@ -12,6 +12,7 @@ import (
 
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
+	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 
@@ -95,7 +96,6 @@ func (state *pieceProgress) readMessage() error {
 		}
 		state.client.Bitfield.SetPiece(index)
 	case message.MsgPiece:
-		log.Infof("received piece index %d", state.index)
 		n, err := message.ParsePiece(state.index, state.buf, msg)
 		if err != nil {
 			return err
@@ -143,7 +143,6 @@ func attemptDownloadPiece(c *client.Client, pw *pieceWork) ([]byte, error) {
 				if bytesDue < blockSize {
 					blockSize = bytesDue
 				}
-				log.Debugf("requesting piece %d, start %d, size %d", pw.index, state.requested, blockSize)
 				err := c.SendRequest(pw.index, state.requested, blockSize)
 				if err != nil {
 					return nil, err
@@ -188,6 +187,13 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 			log.Errorf("Could not handshake with %s. Disconnecting", peer)
 			return
 		}
+
+		for _, c := range clients {
+			t.Lock()
+			t.Conns = append(t.Conns, c.Conn)
+			t.Unlock()
+		}
+
 		go func() {
 			sock := mpC.GetSocket()
 			for {
@@ -199,14 +205,11 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 						continue
 					}
 
-					log.Infof("Checking conn with id %s", v.GetId())
-
 					connAlreadyOpen := false
 					for _, cl := range clients {
 						if cl.Conn.GetId() == v.GetId() {
 							connAlreadyOpen = true
 							log.Debugf("Got already open conn for id %s", v.GetId())
-							log.Infof("Skipping conn %p", v)
 							break
 						}
 					}
@@ -227,6 +230,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 							log.Infof("Starting Download from new client")
 							t.Lock()
 							t.Conns = append(t.Conns, c.Conn)
+							t.Unlock()
 							c.Handshake()
 							for pw := range t.workQueue {
 								if !c.Bitfield.HasPiece(pw.index) {
@@ -367,7 +371,21 @@ func (t *Torrent) Download() ([]byte, error) {
 
 	}
 	close(t.workQueue)
-
+	for i, v := range t.Conns {
+		log.Debugf("Checking con %d for metrics", i)
+		m := v.GetMetrics()
+		if m != nil {
+			path := v.GetPath()
+			if path != nil {
+				log.Debugf("Got following bw over path %s", pathselection.PathToString(*path))
+			}
+			bwMbits := make([]int64, 0)
+			for _, b := range m.ReadBandwidth {
+				bwMbits = append(bwMbits, int64(float64(b*8)/1024/1024))
+			}
+			log.Debug(bwMbits)
+		}
+	}
 	return buf, nil
 }
 

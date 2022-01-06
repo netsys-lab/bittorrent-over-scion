@@ -1,11 +1,11 @@
 package server
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"net"
 
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
@@ -13,6 +13,7 @@ import (
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
 	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
+	ps "github.com/netsys-lab/bittorrent-over-scion/pathselection"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 
@@ -24,6 +25,11 @@ import (
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 )
+
+type ExtPeer struct {
+	sock      *smp.MPPeerSock
+	selection *ServerSelection
+}
 
 // A Client is a TCP connection with a peer
 type Server struct {
@@ -40,17 +46,45 @@ type Server struct {
 	DialBackStartPort int
 	discoveryConfig   *config.PeerDiscoveryConfig
 	dhtNode           *dht_node.DhtNode // dht note controlled by this server
+	pathStore         *ps.PathSelectionStore
+	extPeers          []ExtPeer
 }
 
 //LastSelection users could add more fields
 type ServerSelection struct {
 	lastSelectedPathSet pathselection.PathSet
 	numPaths            int
+	usedPaths           []snet.Path
 }
 
 // We use server-side pathselection, meaning the server connects back to the client
 func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
-	ps := pathSet.GetPathSmallHopCount(s.numPaths)
+	// ps := pathSet.GetPathSmallHopCount(s.numPaths)
+
+	if s.numPaths > 0 {
+		ps := pathSet.GetPathSmallHopCount(s.numPaths)
+		for i, v := range ps.Paths {
+			log.Debugf("Got path %s for conn %d", pathselection.PathToString(v.Path), i+1)
+		}
+
+		return ps, nil
+	}
+
+	// Filter by used paths
+	ps := &pathselection.PathSet{
+		Address: pathSet.Address,
+		Paths:   make([]pathselection.PathQuality, 0),
+	}
+
+	for i, v := range s.usedPaths {
+		pathQualityIndex := pathselection.FindIndexByPathString(pathSet.Paths, pathselection.PathToString(v))
+		ps.Paths = append(ps.Paths, pathSet.Paths[pathQualityIndex])
+		log.Debugf("Got path %s for conn %d", pathselection.PathToString(pathSet.Paths[pathQualityIndex].Path), i+1)
+		// if i == 1 {
+		//	break
+		// }
+	}
+
 	return ps, nil
 }
 
@@ -75,6 +109,8 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 		NumPaths:          numPaths,
 		DialBackStartPort: dialBackPort,
 		discoveryConfig:   discoveryConfig,
+		pathStore:         ps.NewPathSelectionStore(),
+		extPeers:          make([]ExtPeer, 0),
 	}
 
 	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
@@ -100,6 +136,42 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	return s, nil
 }
 
+func (s *Server) updateDisjointPathselection(p ExtPeer) {
+	// Create a PeerPathEntry, add it to the store
+	// Beforehand, fill available paths
+	/*paths := make([]snet.Path, 0)
+	for _, v := range p.sock.UnderlaySocket.GetConnections() {
+		v := v.GetPath()
+		if v != nil {
+			paths = append(paths, *v)
+		}
+	}*/
+	// TODO: Error handling
+	paths, _ := p.sock.GetAvailablePaths()
+	paths = append(paths[:1], paths[1])
+	pp := ps.PeerPathEntry{
+		PeerAddrStr:    p.sock.Peer.String(),
+		PeerAddr:       *p.sock.Peer,
+		AvailablePaths: paths, // TODO: Get available paths from socket
+		UsedPaths:      make([]snet.Path, 0),
+	}
+
+	s.pathStore.AddPeerEntry(pp)
+	p.selection.usedPaths = s.pathStore.Get(pp.PeerAddrStr).UsedPaths
+
+	for _, v := range s.extPeers {
+		// After adding, we get the used Paths, which we save in the selection
+		// We need a unique identifier for paths to map them to PathQualities
+		paths := s.pathStore.Get(v.sock.Peer.String()).UsedPaths
+		v.selection.usedPaths = paths
+
+		// Update pathselection in socket
+		// TODO: We need this later
+		v.sock.ForcePathSelection()
+	}
+	s.extPeers = append(s.extPeers, p)
+}
+
 func (s *Server) ListenHandshake() error {
 	var err error
 
@@ -118,7 +190,7 @@ func (s *Server) ListenHandshake() error {
 		if err != nil {
 			return err
 		}
-		log.Infof("Got new Client, dialing back")
+		log.Debugf("Got new Client, dialing back")
 		startPort += 101 // Just increase by a random number to avoid using often used ports (e.g. 50000)
 		go func(remote *snet.UDPAddr, startPort int) {
 			ladr := s.localAddr.Copy()
@@ -136,9 +208,18 @@ func (s *Server) ListenHandshake() error {
 				return
 			}
 			log.Debugf("Connecting to %s", remote.String())
-			err = mpSock.Connect(&ServerSelection{
+			// TODO: We need to make this server selection editable
+			// And maybe we need a method to force pathselection being done
+			// (And a method to get all available paths)
+			sel := &ServerSelection{
 				numPaths: s.NumPaths,
-			}, &socket.ConnectOptions{
+			}
+			s.updateDisjointPathselection(ExtPeer{
+				sock:      mpSock,
+				selection: sel,
+			})
+
+			err = mpSock.Connect(sel, &socket.ConnectOptions{
 				SendAddrPacket:      true,
 				DontWaitForIncoming: true,
 			})
@@ -146,35 +227,42 @@ func (s *Server) ListenHandshake() error {
 				log.Error(err)
 				return
 			}
+
 			conns := mpSock.UnderlaySocket.GetConnections()
 			log.Debugf("Got new connections %d", len(conns))
 			log.Infof("Starting upload to new client...")
 			for i, conn := range conns {
 				if i == 0 {
-					log.Debugf("Skip incoming connection")
 					continue
 				}
 				s.Conns = append(s.Conns, conn)
-				log.Debugf("Starting reading on conn %d with handshake %d", i, i == 0)
 				go s.handleConnection(conn, true)
 
 			}
 			for {
 				// Filter for new connections
 				conns := <-mpSock.OnConnectionsChange
-				log.Debugf("Got new connections %d", len(conns))
-				for i, conn := range conns {
+
+				// Close old connections
+				newConns := make([]packets.UDPConn, 0)
+				for _, v := range s.Conns {
+					if v.GetState() == packets.ConnectionStates.Closed {
+						v.Close()
+						log.Debugf("Closed connection %s", v.GetId())
+					} else {
+						newConns = append(newConns, v)
+					}
+				}
+				s.Conns = newConns
+				for _, conn := range conns {
 					connAlreadyOpen := false
 					for _, oldConn := range s.Conns {
 						if oldConn.GetId() == conn.GetId() {
 							connAlreadyOpen = true
-							log.Debugf("Got already open conn for id %s", conn.GetId())
 						}
 					}
 					if !connAlreadyOpen {
 						s.Conns = append(s.Conns, conn)
-						log.Debugf("Starting reading on conn %p with handshake %d", conn, i == 0)
-						log.Debugf(conn.LocalAddr().String())
 						go s.handleConnection(conn, true)
 					}
 
@@ -210,11 +298,6 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			}
 		case message.MsgRequest:
 			index, begin, length := message.ParseRequest(msg)
-			log.Debugf("got request for piece %d", index)
-			if !waitForHandshake {
-				fmt.Printf("Got request msg with index %d, begin %d, length %d\n", index, begin, length)
-			}
-
 			buf := make([]byte, 8)
 			binary.BigEndian.PutUint32(buf[0:4], uint32(index))
 			binary.BigEndian.PutUint32(buf[4:8], uint32(begin))

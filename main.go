@@ -36,7 +36,7 @@ var flags = struct {
 }{
 	Seed:                        false,
 	PathSelectionResponsibility: "server",
-	NumPaths:                    1,
+	NumPaths:                    0,
 	DialBackStartPort:           45000,
 	LogLevel:                    "INFO",
 	PrintMetrics:                false,

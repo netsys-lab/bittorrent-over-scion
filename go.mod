@@ -1,4 +1,5 @@
 module github.com/netsys-lab/bittorrent-over-scion
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -13,7 +14,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.21.1
 	github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f
 	github.com/netsys-lab/dht v0.1.18
-	github.com/netsys-lab/scion-path-discovery v0.0.0-20211021094322-7cee7191c808
+	github.com/netsys-lab/scion-path-discovery v0.1.0
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/prometheus/common v0.29.0 // indirect
