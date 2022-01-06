@@ -255,7 +255,7 @@ func (s *Server) ListenHandshake() error {
 					}
 				}
 				s.Conns = newConns
-				for i, conn := range conns {
+				for _, conn := range conns {
 					connAlreadyOpen := false
 					for _, oldConn := range s.Conns {
 						if oldConn.GetId() == conn.GetId() {

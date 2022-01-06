@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 )
@@ -43,7 +42,6 @@ func NewPathSelectionStore() *PathSelectionStore {
 func pathsConflict(path1, path2 snet.Path) bool {
 	for _, intP1 := range path1.Metadata().Interfaces {
 		for _, intP2 := range path2.Metadata().Interfaces {
-			fmt.Printf("Comparing %s:%d to %s:%d resulting in %t\n", intP1.IA, intP1.ID, intP2.IA, intP2.ID, intP1.IA.Equal(intP2.IA) && intP1.ID == intP2.ID)
 			if intP1.IA.Equal(intP2.IA) && intP1.ID == intP2.ID {
 				return true
 			}
