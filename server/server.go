@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net"
 
+	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
@@ -191,7 +192,7 @@ func (s *Server) ListenHandshake() error {
 			return err
 		}
 		log.Debugf("Got new Client, dialing back")
-		startPort += 101 // Just increase by a random number to avoid using often used ports (e.g. 50000)
+		startPort = util.EnsureBetweenRandom(startPort+101, 1025, 65000) // Just increase by a random number to avoid using often used ports (e.g. 50000)
 		go func(remote *snet.UDPAddr, startPort int) {
 			ladr := s.localAddr.Copy()
 			ladr.Host.Port = startPort
