@@ -298,13 +298,16 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 				return err
 			}
 		case message.MsgRequest:
-			index, begin, length := message.ParseRequest(msg)
+			index, begin, length, err := message.ParseRequest(msg)
+			if err != nil {
+				return err
+			}
 			buf := make([]byte, 8)
 			binary.BigEndian.PutUint32(buf[0:4], uint32(index))
 			binary.BigEndian.PutUint32(buf[4:8], uint32(begin))
 			buf = append(buf, s.torrentFile.Content[(index*s.torrentFile.PieceLength)+begin:(index*s.torrentFile.PieceLength)+begin+length]...)
 			retMsg := message.Message{ID: message.MsgPiece, Payload: buf}
-			_, err := conn.Write(retMsg.Serialize())
+			_, err = conn.Write(retMsg.Serialize())
 			if err != nil {
 				return err
 			}
