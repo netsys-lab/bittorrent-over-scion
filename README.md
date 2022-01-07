@@ -44,3 +44,6 @@ SCION_CERT_KEY_FILE=key.pem SCION_CERT_FILE=cert.pem ./torrent-client -inPath='5
 
 ## License
 This project is licensed under the GPLv3 license. However, for accurate information regarding license and copyrights, please check individual files.
+
+## Security
+This project is at the moment under ongoing development. API's or expected behavior may change in further versions. In case you observe any security issues, please contact [me](https://github.com/martenwallewein) via mail.
