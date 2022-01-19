@@ -1,4 +1,5 @@
 package message
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -50,12 +51,17 @@ func FormatRequest(index, begin, length int) *Message {
 	return &Message{ID: MsgRequest, Payload: payload}
 }
 
-func ParseRequest(msg *Message) (int, int, int) {
+func ParseRequest(msg *Message) (int, int, int, error) {
+	if msg.ID != MsgRequest {
+		return 0, 0, 0, fmt.Errorf("Expected PIECE (ID %d), got ID %d", MsgPiece, msg.ID)
+	}
+	if len(msg.Payload) < 12 {
+		return 0, 0, 0, fmt.Errorf("Payload too short. %d < 8", len(msg.Payload))
+	}
 	index := binary.BigEndian.Uint32(msg.Payload[0:4])
 	begin := binary.BigEndian.Uint32(msg.Payload[4:8])
 	length := binary.BigEndian.Uint32(msg.Payload[8:12])
-	// fmt.Printf("Received %d, %d, %d\n", index, begin, length)
-	return int(index), int(begin), int(length)
+	return int(index), int(begin), int(length), nil
 }
 
 // FormatHave creates a HAVE message

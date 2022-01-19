@@ -155,7 +155,12 @@ func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
 }
 
 func (p *PathSelectionStore) filterByMinimumUsedPaths(entries []PeerPathEntry, minUsedPath int) []PeerPathEntry {
-	//newEntries := make([]PeerPathEntry, len(p.data))
-	//return newEntries
-	return entries
+	newEntries := make([]PeerPathEntry, len(p.data))
+	for _, entry := range entries {
+		if len(entry.UsedPaths) >= minUsedPath {
+			newEntries = append(newEntries, entry)
+		}
+	}
+	return newEntries
+	// return entries
 }
