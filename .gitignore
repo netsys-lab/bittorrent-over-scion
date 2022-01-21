@@ -9,3 +9,5 @@ torrent-client
 bittorrent-over-scion
 bench/
 .idea
+key.pem
+cert.pem

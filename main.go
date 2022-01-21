@@ -5,7 +5,6 @@ package main
 
 import (
 	"io/ioutil"
-	"time"
 
 	"github.com/anacrolix/tagflag"
 	"github.com/netsys-lab/dht"
@@ -18,29 +17,25 @@ import (
 )
 
 var flags = struct {
-	InPath                      string
-	OutPath                     string
-	Peer                        string
-	Seed                        bool
-	File                        string
-	Local                       string
-	PathSelectionResponsibility string
-	NumPaths                    int
-	DialBackStartPort           int
-	LogLevel                    string
-	EnableDht                   bool
-	DhtPort                     int
-	DhtBootstrapAddr            string
-	PrintMetrics                bool
-	KeepAlive                   bool // only effects leecher, testing purpose only TODO: remove
+	InPath            string `help:"Path to torrent file that should be processed"`
+	OutPath           string `help:"Path where BitTorrent writes the downloaded file"`
+	Peer              string `help:"Remote SCION address"`
+	Seed              bool   `help:"Start BitTorrent in Seeder mode"`
+	File              string `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
+	Local             string `help:"Local SCION address of the seeder"`
+	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
+	DialBackStartPort int    `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
+	LogLevel          string `help:"Optional: Change log level"`
+	EnableDht         bool   `help:"Optional: Run a dht network to announce peers"`
+	DhtPort           int    `help:"Optional: Configure the port to run the dht network"`
+	DhtBootstrapAddr  string `help:"Optional: SCION address of the dht network"`
+	PrintMetrics      bool   `help:"Optional: Display per-path metrics at the end of the download. Only for seed=false"`
 }{
-	Seed:                        false,
-	PathSelectionResponsibility: "server",
-	NumPaths:                    0,
-	DialBackStartPort:           45000,
-	LogLevel:                    "INFO",
-	PrintMetrics:                false,
-	KeepAlive:                   false,
+	Seed:              false,
+	NumPaths:          0,
+	DialBackStartPort: 45000,
+	LogLevel:          "INFO",
+	PrintMetrics:      false,
 }
 
 func setLogging(loglevel string) {
@@ -97,7 +92,7 @@ func main() {
 		}
 		log.Info("Loaded file to RAM")
 		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
-		server, err := server.NewServer(flags.Peer, &tf, flags.PathSelectionResponsibility, flags.NumPaths, flags.DialBackStartPort, &peerDiscoveryConfig)
+		server, err := server.NewServer(flags.Local, &tf, "server", flags.NumPaths, flags.DialBackStartPort, &peerDiscoveryConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -113,12 +108,9 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
-		t, err := tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, flags.PathSelectionResponsibility, &peerDiscoveryConfig)
+		t, err := tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, "server", &peerDiscoveryConfig)
 		if err != nil {
 			log.Fatal(err)
-		}
-		if flags.KeepAlive {
-			time.Sleep(1 * time.Hour)
 		}
 		if t.DhtNode != nil {
 			t.DhtNode.Close()
