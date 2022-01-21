@@ -20,7 +20,7 @@ To use this Bittorrent client (at the moment, SCION usage is mandatory. We will 
 Furthermore, you need valid TLS certificates (used by [quic-go](https://github.com/lucas-clemente/quic-go)). To create these, use:
 `openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes`
 
-Finally, to run a leecher, a valid .torrent file is required to start BitTorrent as seeder. To generate a torrent from a local file, you can use anacrolix `torrent-create` tool: `go run github.com/anacrolix/torrent/cmd/torrent-create samplefile >> samplefile.torrent`.
+Finally, a valid .torrent file is required to start BitTorrent as seeder. To generate a torrent from a local file, you can use anacrolix `torrent-create` tool: `go run github.com/anacrolix/torrent/cmd/torrent-create samplefile >> samplefile.torrent`.
 
 ### Run a seeder
 The following command runs BitTorrent as a seeder:
