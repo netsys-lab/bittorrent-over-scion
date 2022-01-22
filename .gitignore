@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 *.file
-*.torrent
 *.iso
 torrent-client
 bittorrent-over-scion
