@@ -5,11 +5,15 @@ package p2p
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go"
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
@@ -21,6 +25,12 @@ import (
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
+	"github.com/netsys-lab/bittorrent-over-scion/quicutil"
+)
+
+var (
+	// Don't verify the server's cert, as we are not using the TLS PKI.
+	TLSCfg = &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h3"}}
 )
 
 // KiB number of bytes of a kibibyte
@@ -177,10 +187,10 @@ func checkIntegrity(pw *pieceWork, buf []byte) error {
 }
 
 func (t *Torrent) startDownloadWorker(peer peers.Peer) {
-	mpC := client.NewMPClient()
-	var clients []*client.Client
-	var err error
-	if t.PathSelectionResponsibility == "server" {
+	// mpC := client.NewMPClient()
+	// var clients []*client.Client
+	// var err error
+	/*if t.PathSelectionResponsibility == "server" {
 		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash, t.DiscoveryConfig, t.DhtNode)
 		if err != nil {
 			log.Error(err)
@@ -319,7 +329,97 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 			}(c)
 		}
 
+	}*/
+	tlsCerts := quicutil.MustGenerateSelfSignedCert()
+	TLSCfg.Certificates = tlsCerts
+	lAddr, err := net.ResolveUDPAddr("udp", ":45642")
+	if err != nil {
+		log.Fatal(err)
 	}
+	snetAddr, err := snet.ParseUDPAddr(peer.Addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rAddr := &net.UDPAddr{
+		IP:   snetAddr.Host.IP,
+		Port: snetAddr.Host.Port,
+	}
+	conn, err := net.ListenUDP("udp", lAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sess, err := quic.Dial(conn, rAddr, rAddr.String(), TLSCfg, &quic.Config{
+		KeepAlive: true,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("GOT SESSION")
+	s, err := sess.OpenStreamSync(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	udpConn := &packets.QUICReliableConn{}
+
+	udpConn.SetStream(s)
+	udpConn.NoReturnPathConn = true
+	c := &client.Client{
+		Conn:            udpConn,
+		Choked:          false,
+		InfoHash:        t.InfoHash,
+		Peer:            peer,
+		PeerID:          t.PeerID,
+		DiscoveryConfig: t.DiscoveryConfig,
+		DhtNode:         t.DhtNode,
+	}
+
+	err = c.Handshake()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	metrics := c.Conn.GetMetrics()
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			metrics.Tick()
+		}
+	}()
+
+	// log.Debugf("Completed handshake over conn %p", v)
+
+	for pw := range t.workQueue {
+		if !c.Bitfield.HasPiece(pw.index) {
+			t.workQueue <- pw // Put piece back on the queue
+			continue
+		}
+
+		// Download the piece
+		buf, err := attemptDownloadPiece(c, pw)
+		if err != nil {
+			log.Println("Exiting", err)
+			t.workQueue <- pw // Put piece back on the queue
+			return
+		}
+
+		// fmt.Println(buf[:128])
+		/*err = checkIntegrity(pw, buf)
+		if err != nil {
+			log.Fatalf("Piece #%d failed integrity check\n", pw.index)
+			t.workQueue <- pw // Put piece back on the queue
+			continue
+		}*/
+
+		c.SendHave(pw.index)
+		t.results <- &pieceResult{pw.index, buf}
+	}
+
+	bwMbits := make([]int64, 0)
+	for _, b := range metrics.ReadBandwidth {
+		bwMbits = append(bwMbits, int64(float64(b*8)/1024/1024))
+	}
+	log.Error(bwMbits)
 
 }
 

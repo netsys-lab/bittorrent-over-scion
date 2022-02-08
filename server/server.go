@@ -1,30 +1,38 @@
 package server
 
-// SPDX-FileCopyrightText:  2019 NetSys Lab
-// SPDX-License-Identifier: GPL-3.0-only
-
 import (
+	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"net"
 
-	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
 	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
+	"github.com/netsys-lab/bittorrent-over-scion/quicutil"
+	"github.com/netsys-lab/scion-path-discovery/packets"
+
+	// SPDX-FileCopyrightText:  2019 NetSys Lab
+	// SPDX-License-Identifier: GPL-3.0-only
+
 	ps "github.com/netsys-lab/bittorrent-over-scion/pathselection"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 
 	smp "github.com/netsys-lab/scion-path-discovery/api"
-	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
-	"github.com/netsys-lab/scion-path-discovery/socket"
-
 	"github.com/scionproto/scion/go/lib/snet"
+
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	// Don't verify the server's cert, as we are not using the TLS PKI.
+	TLSCfg = &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h3"}}
 )
 
 type ExtPeer struct {
@@ -174,9 +182,41 @@ func (s *Server) updateDisjointPathselection(p ExtPeer) {
 }
 
 func (s *Server) ListenHandshake() error {
-	var err error
+	// var err error
+	tlsCerts := quicutil.MustGenerateSelfSignedCert()
+	TLSCfg.Certificates = tlsCerts
+	snetAddr, err := snet.ParseUDPAddr(s.lAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	lAddr := &net.UDPAddr{
+		IP:   snetAddr.Host.IP,
+		Port: snetAddr.Host.Port,
+	}
+	conn, err := net.ListenUDP("udp", lAddr)
+	if err != nil {
+		return err
+	}
+	qConn, listenErr := quic.Listen(conn, TLSCfg, &quic.Config{KeepAlive: true})
+	if listenErr != nil {
+		return listenErr
+	}
+	x, err := qConn.Accept(context.Background())
+	if err != nil {
+		return err
+	}
+	for {
+		DCConn, err := x.AcceptStream(context.Background())
+		udpConn := &packets.QUICReliableConn{}
 
-	mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
+		udpConn.SetStream(DCConn)
+		udpConn.NoReturnPathConn = true
+		if err != nil {
+			return err
+		}
+		go s.handleConnection(udpConn, true)
+	}
+	/*mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
 		Transport: "QUIC",
 	})
 
@@ -272,7 +312,7 @@ func (s *Server) ListenHandshake() error {
 
 		}(remote, startPort)
 
-	}
+	}*/
 }
 
 func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) error {
