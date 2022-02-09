@@ -7,8 +7,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"time"
 
-	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
@@ -21,7 +21,6 @@ import (
 	smp "github.com/netsys-lab/scion-path-discovery/api"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
-	"github.com/netsys-lab/scion-path-discovery/socket"
 
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
@@ -176,15 +175,37 @@ func (s *Server) updateDisjointPathselection(p ExtPeer) {
 func (s *Server) ListenHandshake() error {
 	var err error
 
-	mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
-		Transport: "QUIC",
-	})
+	// mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
+	//	Transport: "QUIC",
+	// })
 
-	err = mpListener.Listen()
+	mpSock := smp.NewMPPeerSock(s.localAddr.String(), nil, &smp.MPSocketOptions{
+		Transport:                   "QUIC",
+		PathSelectionResponsibility: "CLIENT",
+		MultiportMode:               true,
+	})
+	log.Debugf("New Server listening on %s", s.localAddr.String())
+	err = mpSock.Listen()
+	if err != nil {
+		log.Errorf("Failed to listen %v", err)
+	}
+
+	_, err = mpSock.WaitForPeerConnect(nil)
 	if err != nil {
 		return err
 	}
-	startPort := s.DialBackStartPort
+	for _, conn := range mpSock.UnderlaySocket.GetConnections() {
+		/*if i == 0 {
+			continue
+		}*/
+		s.Conns = append(s.Conns, conn)
+		go s.handleConnection(conn, true)
+
+	}
+
+	time.Sleep(1000 * time.Second)
+
+	/*startPort := s.DialBackStartPort
 	for {
 		log.Info("waiting for MPPeer socket connect")
 		remote, err := mpListener.WaitForMPPeerSockConnect()
@@ -272,7 +293,8 @@ func (s *Server) ListenHandshake() error {
 
 		}(remote, startPort)
 
-	}
+	}*/
+	return nil
 }
 
 func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) error {

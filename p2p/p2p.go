@@ -279,12 +279,12 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 				}
 
 				// fmt.Println(buf[:128])
-				err = checkIntegrity(pw, buf)
+				/*err = checkIntegrity(pw, buf)
 				if err != nil {
 					log.Fatalf("Piece #%d failed integrity check\n", pw.index)
 					t.workQueue <- pw // Put piece back on the queue
 					continue
-				}
+				}*/
 
 				c.SendHave(pw.index)
 				t.results <- &pieceResult{pw.index, buf}
@@ -306,12 +306,12 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 					}
 
 					// fmt.Println(buf[:128])
-					err = checkIntegrity(pw, buf)
+					/*err = checkIntegrity(pw, buf)
 					if err != nil {
 						log.Fatalf("Piece #%d failed integrity check\n", pw.index)
 						t.workQueue <- pw // Put piece back on the queue
 						continue
-					}
+					}*/
 
 					c.SendHave(pw.index)
 					t.results <- &pieceResult{pw.index, buf}
@@ -377,7 +377,7 @@ func (t *Torrent) Download() ([]byte, error) {
 		if m != nil {
 			path := v.GetPath()
 			if path != nil {
-				log.Debugf("Got following bw over path %s", pathselection.PathToString(*path))
+				log.Debugf("Got following bw over path %s, read", pathselection.PathToString(*path), m.ReadBytes)
 			}
 			bwMbits := make([]int64, 0)
 			for _, b := range m.ReadBandwidth {

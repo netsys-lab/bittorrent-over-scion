@@ -56,7 +56,7 @@ type ClientInitiatedSelection struct {
 //CustomPathSelectAlg this is where the user actually wants to implement its logic in
 func (lastSel *ClientInitiatedSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*pathselection.PathSet, error) {
 	// Connect via shortest path
-	return pathSet.GetPathSmallHopCount(1), nil
+	return pathSet.GetPathSmallHopCount(3), nil
 }
 
 // send BitTorrent handshake and wait for response, ping remotes DHT Node when existing as specified in BEP5
@@ -176,18 +176,18 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 	}
 
 	// Wait for incoming connections
-	_, err = mpSock.WaitForPeerConnect(nil)
+	// _, err = mpSock.WaitForPeerConnect(nil)
 
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	//	return nil, err
+	//}
 	clients := make([]*Client, 0)
 	var bf bitfield.Bitfield
-	conLen := len(mpSock.UnderlaySocket.GetConnections())
+	// conLen := len(mpSock.UnderlaySocket.GetConnections())
 	for i, v := range mpSock.UnderlaySocket.GetConnections() {
 
 		// Last one is incoming connection, which we need to skip here...
-		if i == conLen-1 {
+		if i == 0 {
 			continue
 		}
 
