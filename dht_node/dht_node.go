@@ -8,14 +8,13 @@ import (
 	"time"
 
 	dhtLog "github.com/anacrolix/log" // logger for dht Node
-	"github.com/anacrolix/torrent/metainfo"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/netsec-ethz/scion-apps/pkg/appnet"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/dht"
 	peerStore "github.com/netsys-lab/dht/peer-store"
+	"github.com/netsys-lab/scion-path-discovery/sutils"
 )
 
 type DhtNode struct {
@@ -48,7 +47,7 @@ func New(
 	log.Infof("creating new dht node, initial nodes: %+v, listening on: %+v, peer port: %d", startingNodes, nodeAddr, peerPort)
 	stats := &dhtStats{}
 
-	con, err := appnet.Listen(nodeAddr.Host)
+	con, err := sutils.Listen(nodeAddr.Host)
 	if err != nil {
 		log.Error("error creating connection for dht node")
 		return nil, err
@@ -60,7 +59,8 @@ func New(
 	dhtConf.PeerStore = &peerStore.InMemory{}
 	dhtConf.Logger = dhtLog.Default.FilterLevel(dhtLog.Debug)
 
-	dhtConf.OnAnnouncePeer = func(infoHash metainfo.Hash, scionAddr snet.UDPAddr, port int, portOk bool) {
+	// DHT
+	/*dhtConf.OnAnnouncePeer = func(infoHash metainfo.Hash, scionAddr snet.UDPAddr, port int, portOk bool) {
 		log.Debugf("handling announce for %s - %s - %d - %t", infoHash, scionAddr.String(), port, portOk)
 		var infoH [20]byte
 		copy(infoH[:], infoHash.Bytes())
@@ -70,7 +70,7 @@ func New(
 			return
 		}
 		atomic.AddUint32(&stats.announcesHandled, 1)
-	}
+	}*/
 
 	dhtConf.StartingNodes = func() ([]dht.Addr, error) {
 		nodes := uniqueStartingNodes(append(startingNodes, localNodeAddr))

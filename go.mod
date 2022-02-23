@@ -11,15 +11,12 @@ require (
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/torrent v1.30.2
 	github.com/jackpal/bencode-go v1.0.0
-	github.com/lucas-clemente/quic-go v0.21.1
-	github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f
 	github.com/netsys-lab/dht v0.1.18
-	github.com/netsys-lab/scion-path-discovery v0.1.0
-	github.com/opentracing/opentracing-go v1.2.0 // indirect
+	github.com/netsys-lab/scion-path-discovery v1.0.1-0.20220222124208-99f21e3033db
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/prometheus/common v0.29.0 // indirect
-	github.com/scionproto/scion v0.6.0
-	github.com/sirupsen/logrus v1.6.0
+	github.com/scionproto/scion v0.6.1-0.20210929154253-764d6e2afe47
+	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	go.uber.org/atomic v1.8.0 // indirect
@@ -28,3 +25,6 @@ require (
 	google.golang.org/genproto v0.0.0-20210614182748-5b3b54cad159 // indirect
 	google.golang.org/grpc/examples v0.0.0-20211015201449-4757d0249e2d // indirect
 )
+
+replace github.com/netsys-lab/dht => /home/marten/go/src/github.com/netsys-lab/dht
+replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/netsys-lab/scion-path-discovery
