@@ -58,6 +58,9 @@ We provide a running seeder and a sample torrent file in the [demo](https://gith
 - [x] Support Dht based peer discovery
 - [ ] Support magnet links
 - [ ] Support multi-file torrents
+- [ ] Support multiple torrents by one running instance
+- [ ] Support TCP and SCION connections depending on peer information
+- [ ] Add a GUI on top of the command line client
 
 ## License
 This project is licensed under the GPLv3 license. However, for accurate information regarding license and copyrights, please check individual files.
