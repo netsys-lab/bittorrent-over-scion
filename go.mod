@@ -16,7 +16,7 @@ require (
 	github.com/netsys-lab/scion-path-discovery v0.1.0
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/scionproto/scion v0.6.0
-	github.com/sirupsen/logrus v1.6.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 )
 
@@ -51,8 +51,6 @@ require (
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/inconshreveable/log15 v0.0.0-20180818164646-67afb5ed74ec // indirect
-	github.com/johannwagner/scion-optimized-connection v0.3.0 // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/marten-seemann/qtls-go1-15 v0.1.4 // indirect
 	github.com/marten-seemann/qtls-go1-16 v0.1.3 // indirect
 	github.com/marten-seemann/qtls-go1-17 v0.1.0-beta.1.2 // indirect
@@ -60,6 +58,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/netsec-ethz/rains v0.2.0 // indirect
+	github.com/netsys-lab/scion-optimized-connection v0.4.2-0.20220107124242-cc4b4825db7f // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml v1.9.3 // indirect
@@ -91,3 +90,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	zombiezen.com/go/capnproto2 v0.0.0-20190813022230-ddfb9bb855fa // indirect
 )
+
+replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/netsys-lab/scion-path-discovery

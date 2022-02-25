@@ -7,6 +7,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"os"
+	"sync"
+	"time"
 
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
@@ -49,6 +52,8 @@ type Server struct {
 	dhtNode           *dht_node.DhtNode // dht note controlled by this server
 	pathStore         *ps.PathSelectionStore
 	extPeers          []ExtPeer
+	CsvPath           string
+	sync.Mutex
 }
 
 //LastSelection users could add more fields
@@ -112,6 +117,7 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 		discoveryConfig:   discoveryConfig,
 		pathStore:         ps.NewPathSelectionStore(),
 		extPeers:          make([]ExtPeer, 0),
+		CsvPath:           "/tmp/metrics.csv",
 	}
 
 	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
@@ -173,6 +179,58 @@ func (s *Server) updateDisjointPathselection(p ExtPeer) {
 	s.extPeers = append(s.extPeers, p)
 }
 
+func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string) {
+	p := conn.GetPath()
+	metrics := UploadConnMetrics{
+		ConnId:    conn.GetId(),
+		SessionId: sessionId,
+		Remote:    conn.GetRemote().String(),
+		StartDate: time.Now(),
+	}
+
+	if p != nil {
+		metrics.Path = pathselection.PathToString(*p)
+	}
+
+	err := s.handleConnection(conn, true)
+	m := conn.GetMetrics()
+	if m != nil {
+		metrics.Metrics = *m
+	}
+	if err == nil {
+		metrics.Closed = true
+	}
+	metrics.EndDate = time.Now()
+	metrics.Duration = time.Since(metrics.StartDate)
+	csv := metrics.GetCsv()
+	s.Lock()
+	var f *os.File
+	if _, err = os.Stat(s.CsvPath); err != nil {
+		f, err = os.OpenFile(s.CsvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		f.WriteString(metrics.GetCsvHeader())
+		f.WriteString("\n")
+	} else {
+		f, err = os.OpenFile(s.CsvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+	}
+
+	f.WriteString(csv)
+	f.WriteString("\n")
+	err = f.Close()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	s.Unlock()
+}
+
 func (s *Server) ListenHandshake() error {
 	var err error
 
@@ -192,6 +250,7 @@ func (s *Server) ListenHandshake() error {
 			return err
 		}
 		log.Debugf("Got new Client, dialing back")
+		sessionId := util.RandStringBytes(16)
 		startPort = util.EnsureBetweenRandom(startPort+101, 1025, 65000) // Just increase by a random number to avoid using often used ports (e.g. 50000)
 		go func(remote *snet.UDPAddr, startPort int) {
 			ladr := s.localAddr.Copy()
@@ -237,7 +296,7 @@ func (s *Server) ListenHandshake() error {
 					continue
 				}
 				s.Conns = append(s.Conns, conn)
-				go s.handleConnection(conn, true)
+				go s.measureConnMetrics(conn, sessionId)
 
 			}
 			for {
@@ -264,7 +323,7 @@ func (s *Server) ListenHandshake() error {
 					}
 					if !connAlreadyOpen {
 						s.Conns = append(s.Conns, conn)
-						go s.handleConnection(conn, true)
+						go s.measureConnMetrics(conn, sessionId)
 					}
 
 				}
