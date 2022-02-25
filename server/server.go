@@ -149,7 +149,7 @@ func (s *Server) updateDisjointPathselection(p ExtPeer) {
 	}*/
 	// TODO: Error handling
 	paths, _ := p.sock.GetAvailablePaths()
-	paths = append(paths[:1], paths[1])
+	// paths = append(paths[:1], paths[1])
 	pp := ps.PeerPathEntry{
 		PeerAddrStr:    p.sock.Peer.String(),
 		PeerAddr:       *p.sock.Peer,
