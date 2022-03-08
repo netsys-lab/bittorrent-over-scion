@@ -22,7 +22,6 @@ type UploadConnMetrics struct {
 func (m *UploadConnMetrics) GetCsv() string {
 	secs := int64((m.Duration * time.Second) - 3*time.Second)
 	bw := (m.Metrics.WrittenBytes * 8 / 1024 / 1024) / secs
-	fmt.Printf("bw %d in secs %d\n", m.Metrics.WrittenBytes, secs)
 	// id;remote;sessionId;uploadBw;startDate;endDate;closed;path;duration;
 	return fmt.Sprintf("%s;%s;%s;%d;%s;%s;%t;%s;%d", m.ConnId, m.Remote, m.SessionId, bw, m.StartDate, m.EndDate, m.Closed, m.Path, m.Duration)
 }

@@ -101,9 +101,15 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 		return nil, errors.New("client based pathselection not supported yet")
 	}
 
-	localAddr, err := snet.ParseUDPAddr(lAddr)
-	if err != nil {
-		return nil, err
+	var localAddr *snet.UDPAddr
+	var err error
+	if lAddr == "" {
+		localAddr, err = util.GetDefaultLocalAddr()
+	} else {
+		localAddr, err = snet.ParseUDPAddr(lAddr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s := &Server{
@@ -179,7 +185,7 @@ func (s *Server) updateDisjointPathselection(p ExtPeer) {
 	s.extPeers = append(s.extPeers, p)
 }
 
-func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string) {
+func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string, wg *sync.WaitGroup) {
 	p := conn.GetPath()
 	metrics := UploadConnMetrics{
 		ConnId:    conn.GetId(),
@@ -228,6 +234,13 @@ func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string) {
 		log.Error(err)
 		return
 	}
+
+	err = conn.Close()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	wg.Done()
 	s.Unlock()
 }
 
@@ -291,44 +304,51 @@ func (s *Server) ListenHandshake() error {
 			conns := mpSock.UnderlaySocket.GetConnections()
 			log.Debugf("Got new connections %d", len(conns))
 			log.Infof("Starting upload to new client...")
+			var wg sync.WaitGroup
 			for i, conn := range conns {
 				if i == 0 {
 					continue
 				}
 				s.Conns = append(s.Conns, conn)
-				go s.measureConnMetrics(conn, sessionId)
+				wg.Add(1)
+				go s.measureConnMetrics(conn, sessionId, &wg)
 
 			}
-			for {
-				// Filter for new connections
-				conns := <-mpSock.OnConnectionsChange
+			go func() {
+				for {
+					// Filter for new connections
+					conns := <-mpSock.OnConnectionsChange
 
-				// Close old connections
-				newConns := make([]packets.UDPConn, 0)
-				for _, v := range s.Conns {
-					if v.GetState() == packets.ConnectionStates.Closed {
-						v.Close()
-						log.Debugf("Closed connection %s", v.GetId())
-					} else {
-						newConns = append(newConns, v)
-					}
-				}
-				s.Conns = newConns
-				for _, conn := range conns {
-					connAlreadyOpen := false
-					for _, oldConn := range s.Conns {
-						if oldConn.GetId() == conn.GetId() {
-							connAlreadyOpen = true
+					// Close old connections
+					newConns := make([]packets.UDPConn, 0)
+					for _, v := range s.Conns {
+						if v.GetState() == packets.ConnectionStates.Closed {
+							v.Close()
+							log.Debugf("Closed connection %s", v.GetId())
+						} else {
+							newConns = append(newConns, v)
 						}
 					}
-					if !connAlreadyOpen {
-						s.Conns = append(s.Conns, conn)
-						go s.measureConnMetrics(conn, sessionId)
+					s.Conns = newConns
+					for _, conn := range conns {
+						connAlreadyOpen := false
+						for _, oldConn := range s.Conns {
+							if oldConn.GetId() == conn.GetId() {
+								connAlreadyOpen = true
+							}
+						}
+						if !connAlreadyOpen {
+							s.Conns = append(s.Conns, conn)
+							wg.Add(1)
+							go s.measureConnMetrics(conn, sessionId, &wg)
+						}
+
 					}
-
 				}
-			}
-
+			}()
+			wg.Wait()
+			mpSock.Disconnect()
+			log.Infof("Disconnected %s", remote.String())
 		}(remote, startPort)
 
 	}
