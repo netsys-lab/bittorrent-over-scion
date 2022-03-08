@@ -90,5 +90,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	zombiezen.com/go/capnproto2 v0.0.0-20190813022230-ddfb9bb855fa // indirect
 )
-
-replace github.com/netsys-lab/scion-path-discovery => /home/marten/go/src/github.com/netsys-lab/scion-path-discovery
