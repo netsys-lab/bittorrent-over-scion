@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
@@ -136,16 +137,27 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 	infoHash [20]byte,
 	discoveryConfig *config.PeerDiscoveryConfig,
 	node *dht_node.DhtNode) ([]*Client, error) {
+	var err error
 
 	address, err := snet.ParseUDPAddr(peer.Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	localSocketAddr, err := snet.ParseUDPAddr(local)
-	if err != nil {
-		return nil, err
+	var localSocketAddr *snet.UDPAddr
+
+	if local == "" {
+		localSocketAddr, err = util.GetDefaultLocalAddr()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		localSocketAddr, err = snet.ParseUDPAddr(local)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	localSocketAddr.Host.Port, _ = freeport.GetFreePort()
 	localSocketAddrStr := localSocketAddr.String()
 
