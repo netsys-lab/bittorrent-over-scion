@@ -592,6 +592,8 @@ github.com/netsys-lab/dht v0.1.18 h1:15IIZwb0Is0z3McM9MOCuRqeMEOp0DKHdQxrUO1glkI
 github.com/netsys-lab/dht v0.1.18/go.mod h1:6QHwOc+4cUK+PO9spTWjSUHT5eYHKgVAmCbDjPYinzU=
 github.com/netsys-lab/scion-optimized-connection v0.4.2-0.20220107124242-cc4b4825db7f h1:r1foN6U7eOsD+73zBHFNUZO+1BEWu7GkcRZuu1L/gw0=
 github.com/netsys-lab/scion-optimized-connection v0.4.2-0.20220107124242-cc4b4825db7f/go.mod h1:yL9AhbhrOEcoQyg7xJSLEP9TvHw4nrY1mdG0V60MF9M=
+github.com/netsys-lab/scion-path-discovery v1.0.1-0.20220308120244-5d3dfbea5e05 h1:OPS87tk7F+D/0w9/CSf02d38hqGiz/4bkcKM1y0A5kk=
+github.com/netsys-lab/scion-path-discovery v1.0.1-0.20220308120244-5d3dfbea5e05/go.mod h1:MLcbOPImZSXSWOdUAZuyTa4IU7e3edk6CvDHVWH4cRI=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
