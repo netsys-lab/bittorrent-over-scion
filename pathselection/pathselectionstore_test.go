@@ -107,26 +107,26 @@ func TestMultiplePeers(t *testing.T) {
 
 	t.Run("TestAddFirstPeer", func(t *testing.T) {
 		store.AddPeerEntry(p)
-		assert.Equal(t, len(store.data), 1)
-		assert.Equal(t, len(store.data[addr].UsedPaths), 2)
+		assert.Equal(t, len(store.Data), 1)
+		assert.Equal(t, len(store.Data[addr].UsedPaths), 2)
 	})
 
 	t.Run("TestNonConflictingPeer", func(t *testing.T) {
 		store.AddPeerEntry(p2)
-		assert.Equal(t, len(store.data), 2)
-		assert.Equal(t, len(store.data[addr].UsedPaths), 2)
-		assert.Equal(t, len(store.data[addr].UsedPaths), len(store.data[addr].AvailablePaths))
-		assert.Equal(t, len(store.data[addr2].UsedPaths), 2)
+		assert.Equal(t, len(store.Data), 2)
+		assert.Equal(t, len(store.Data[addr].UsedPaths), 2)
+		assert.Equal(t, len(store.Data[addr].UsedPaths), len(store.Data[addr].AvailablePaths))
+		assert.Equal(t, len(store.Data[addr2].UsedPaths), 2)
 	})
 
 	t.Run("TestConflictingPeer", func(t *testing.T) {
 		store.AddPeerEntry(p3)
-		assert.Equal(t, len(store.data), 3)
-		assert.Equal(t, len(store.data[addr].UsedPaths), 1)
-		assert.Equal(t, len(store.data[addr].UsedPaths), len(store.data[addr].AvailablePaths)-1)
-		assert.Equal(t, len(store.data[addr2].UsedPaths), 2)
-		assert.Equal(t, len(store.data[addr2].UsedPaths), len(store.data[addr2].AvailablePaths))
-		assert.Equal(t, len(store.data[addr3].UsedPaths), 1)
+		assert.Equal(t, len(store.Data), 3)
+		assert.Equal(t, len(store.Data[addr].UsedPaths), 1)
+		assert.Equal(t, len(store.Data[addr].UsedPaths), len(store.Data[addr].AvailablePaths)-1)
+		assert.Equal(t, len(store.Data[addr2].UsedPaths), 2)
+		assert.Equal(t, len(store.Data[addr2].UsedPaths), len(store.Data[addr2].AvailablePaths))
+		assert.Equal(t, len(store.Data[addr3].UsedPaths), 1)
 	})
 
 }

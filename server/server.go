@@ -342,6 +342,10 @@ func (s *Server) ListenHandshake() error {
 							wg.Add(1)
 							go s.measureConnMetrics(conn, sessionId, &wg)
 						}
+<<<<<<< HEAD
+=======
+
+>>>>>>> Fix handling of disconnected peers
 					}
 				}
 			}()
