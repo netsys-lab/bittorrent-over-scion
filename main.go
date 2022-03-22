@@ -30,6 +30,7 @@ var flags = struct {
 	DhtPort           int    `help:"Optional: Configure the port to run the dht network"`
 	DhtBootstrapAddr  string `help:"Optional: SCION address of the dht network"`
 	PrintMetrics      bool   `help:"Optional: Display per-path metrics at the end of the download. Only for seed=false"`
+	ExportMetricsTo   string `help:"Optional: Export per-path metrics to a particular target, at the moment a csv file (e.g. /tmp/metrics.csv)"`
 }{
 	Seed:              false,
 	NumPaths:          0,
@@ -92,7 +93,16 @@ func main() {
 		}
 		log.Info("Loaded file to RAM")
 		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
-		server, err := server.NewServer(flags.Local, &tf, "server", flags.NumPaths, flags.DialBackStartPort, &peerDiscoveryConfig)
+		conf := server.ServerConfig{
+			LAddr:                       flags.Local,
+			TorrentFile:                 &tf,
+			PathSelectionResponsibility: "server",
+			NumPaths:                    flags.NumPaths,
+			DialBackPort:                flags.DialBackStartPort,
+			DiscoveryConfig:             &peerDiscoveryConfig,
+			ExportMetricsTarget:         flags.ExportMetricsTo,
+		}
+		server, err := server.NewServer(&conf)
 		if err != nil {
 			log.Fatal(err)
 		}
