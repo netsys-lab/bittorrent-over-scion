@@ -215,7 +215,6 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 					}
 
 					if !connAlreadyOpen {
-
 						c := client.Client{
 							Conn:            v,
 							Choked:          false,
@@ -241,7 +240,9 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 								// Download the piece
 								buf, err := attemptDownloadPiece(c, pw)
 								if err != nil {
-									log.Println("Exiting", err)
+									log.Warn("Error downloading piece, retrying in a new connection...", err)
+									c.Conn.Close()
+									c.Conn.SetId("TMP")
 									t.workQueue <- pw // Put piece back on the queue
 									return
 								}
@@ -262,8 +263,10 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 
 	log.Infof("Completed handshake with %s, got %d clients", peer, len(clients))
 	log.Infof("Starting download...")
-	for i, c := range clients {
-		if i == len(clients)-1 {
+	var wg sync.WaitGroup
+	for _, c := range clients {
+		wg.Add(1)
+		go func(c *client.Client) {
 			for pw := range t.workQueue {
 				if !c.Bitfield.HasPiece(pw.index) {
 					t.workQueue <- pw // Put piece back on the queue
@@ -273,8 +276,11 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 				// Download the piece
 				buf, err := attemptDownloadPiece(c, pw)
 				if err != nil {
-					log.Println("Exiting", err)
+					log.Warn("Error downloading piece, retrying in a new connection...", err)
+					c.Conn.Close()
+					c.Conn.SetId("TMP")
 					t.workQueue <- pw // Put piece back on the queue
+					wg.Done()
 					return
 				}
 
@@ -289,38 +295,26 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 				c.SendHave(pw.index)
 				t.results <- &pieceResult{pw.index, buf}
 			}
-		} else {
-			go func(c *client.Client) {
-				for pw := range t.workQueue {
-					if !c.Bitfield.HasPiece(pw.index) {
-						t.workQueue <- pw // Put piece back on the queue
-						continue
-					}
-
-					// Download the piece
-					buf, err := attemptDownloadPiece(c, pw)
-					if err != nil {
-						log.Println("Exiting", err)
-						t.workQueue <- pw // Put piece back on the queue
-						return
-					}
-
-					// fmt.Println(buf[:128])
-					err = checkIntegrity(pw, buf)
-					if err != nil {
-						log.Fatalf("Piece #%d failed integrity check\n", pw.index)
-						t.workQueue <- pw // Put piece back on the queue
-						continue
-					}
-
-					c.SendHave(pw.index)
-					t.results <- &pieceResult{pw.index, buf}
-				}
-			}(c)
-		}
+			wg.Done()
+		}(c)
 
 	}
-
+	wg.Wait()
+	log.Debug("Return from startDownloadWorker")
+	select {
+	case p, ok := <-t.workQueue:
+		if ok {
+			log.Debug("Got not downloaded pieces, retrying...")
+			t.workQueue <- p
+			t.startDownloadWorker(peer)
+		} else {
+			log.Debug("No further pieces, done")
+			return
+		}
+	default:
+		log.Info("No further pieces, done")
+		return
+	}
 }
 
 func (t *Torrent) calculateBoundsForPiece(index int) (begin int, end int) {

@@ -33,6 +33,7 @@ import (
 type ExtPeer struct {
 	sock      *smp.MPPeerSock
 	selection *ServerSelection
+	id        string
 }
 
 // A Client is a TCP connection with a peer
@@ -94,19 +95,29 @@ func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*
 	return ps, nil
 }
 
-func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelectionResponsibility string, numPaths, dialBackPort int, discoveryConfig *config.PeerDiscoveryConfig) (*Server, error) {
+type ServerConfig struct {
+	LAddr                       string
+	TorrentFile                 *torrentfile.TorrentFile
+	PathSelectionResponsibility string
+	NumPaths                    int
+	DialBackPort                int
+	DiscoveryConfig             *config.PeerDiscoveryConfig
+	ExportMetricsTarget         string
+}
+
+func NewServer(config *ServerConfig) (*Server, error) {
 
 	// Maybe there is an efficient way to do this, but for Bittorrent its not that useful...
-	if pathSelectionResponsibility == "client" {
+	if config.PathSelectionResponsibility == "client" {
 		return nil, errors.New("client based pathselection not supported yet")
 	}
 
 	var localAddr *snet.UDPAddr
 	var err error
-	if lAddr == "" {
+	if config.LAddr == "" {
 		localAddr, err = util.GetDefaultLocalAddr()
 	} else {
-		localAddr, err = snet.ParseUDPAddr(lAddr)
+		localAddr, err = snet.ParseUDPAddr(config.LAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -115,28 +126,28 @@ func NewServer(lAddr string, torrentFile *torrentfile.TorrentFile, pathSelection
 	s := &Server{
 		peers:             peers.NewPeerSet(0),
 		Conns:             make([]packets.UDPConn, 0),
-		lAddr:             lAddr,
+		lAddr:             config.LAddr,
 		localAddr:         localAddr,
-		torrentFile:       torrentFile,
-		NumPaths:          numPaths,
-		DialBackStartPort: dialBackPort,
-		discoveryConfig:   discoveryConfig,
+		torrentFile:       config.TorrentFile,
+		NumPaths:          config.NumPaths,
+		DialBackStartPort: config.DialBackPort,
+		discoveryConfig:   config.DiscoveryConfig,
 		pathStore:         ps.NewPathSelectionStore(),
 		extPeers:          make([]ExtPeer, 0),
-		CsvPath:           "/tmp/metrics.csv",
+		CsvPath:           config.ExportMetricsTarget,
 	}
 
-	s.Bitfield = make([]byte, len(torrentFile.PieceHashes))
-	for i := range torrentFile.PieceHashes {
+	s.Bitfield = make([]byte, len(config.TorrentFile.PieceHashes))
+	for i := range config.TorrentFile.PieceHashes {
 		s.Bitfield.SetPiece(i)
 	}
 
-	if discoveryConfig.EnableDht {
+	if config.DiscoveryConfig.EnableDht {
 		nodeAddr := localAddr.Copy()
-		nodeAddr.Host.Port = int(discoveryConfig.DhtPort)
+		nodeAddr.Host.Port = int(config.DiscoveryConfig.DhtPort)
 
-		startingNodes := append(torrentFile.Nodes, discoveryConfig.DhtNodes...)
-		node, err := dht_node.New(nodeAddr, torrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
+		startingNodes := append(config.TorrentFile.Nodes, config.DiscoveryConfig.DhtNodes...)
+		node, err := dht_node.New(nodeAddr, config.TorrentFile.InfoHash, startingNodes, uint16(localAddr.Host.Port), func(peer peers.Peer) {
 			log.Infof("received peer via dht: %s, peer already known: %t", peer, s.hasPeer(peer))
 			s.peers.Add(peer)
 		})
@@ -198,6 +209,7 @@ func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string, wg *
 		metrics.Path = pathselection.PathToString(*p)
 	}
 
+	// TODO: Retry?
 	err := s.handleConnection(conn, true)
 	m := conn.GetMetrics()
 	if m != nil {
@@ -290,6 +302,7 @@ func (s *Server) ListenHandshake() error {
 			s.updateDisjointPathselection(ExtPeer{
 				sock:      mpSock,
 				selection: sel,
+				id:        remote.String(),
 			})
 
 			err = mpSock.Connect(sel, &socket.ConnectOptions{
@@ -342,13 +355,25 @@ func (s *Server) ListenHandshake() error {
 							wg.Add(1)
 							go s.measureConnMetrics(conn, sessionId, &wg)
 						}
-
 					}
 				}
 			}()
 			wg.Wait()
 			mpSock.Disconnect()
 			log.Infof("Disconnected %s", remote.String())
+			s.Lock()
+			// TODO: Update pathselection
+			delete(s.pathStore.Data, remote.String())
+			newPeers := make([]ExtPeer, 0)
+			for _, p := range s.extPeers {
+				if p.id != remote.String() {
+					newPeers = append(newPeers, p)
+				} else {
+					log.Debugf("Remove peer %s from list", remote.String())
+				}
+			}
+			s.extPeers = newPeers
+			s.Unlock()
 		}(remote, startPort)
 
 	}
