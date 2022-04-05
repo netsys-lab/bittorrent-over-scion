@@ -24,12 +24,12 @@ type ConflictingPathResult struct {
 }
 
 type PathSelectionStore struct {
-	data map[string]PeerPathEntry
+	Data map[string]PeerPathEntry
 }
 
 func NewPathSelectionStore() *PathSelectionStore {
 	return &PathSelectionStore{
-		data: make(map[string]PeerPathEntry, 0),
+		Data: make(map[string]PeerPathEntry, 0),
 	}
 }
 
@@ -83,11 +83,11 @@ func sortPeerPathEntries(entries []PeerPathEntry) []PeerPathEntry {
 }
 
 func (p *PathSelectionStore) Get(id string) PeerPathEntry {
-	return p.data[id]
+	return p.Data[id]
 }
 
 func (p *PathSelectionStore) updatePeerEntryInStore(entry PeerPathEntry) {
-	p.data[entry.PeerAddrStr] = entry
+	p.Data[entry.PeerAddrStr] = entry
 }
 
 func removePathFromEntry(entry PeerPathEntry, pathIndex int) PeerPathEntry {
@@ -99,8 +99,8 @@ func removePathFromEntry(entry PeerPathEntry, pathIndex int) PeerPathEntry {
 
 // Used paths should be empty here...
 func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
-	potentialConflictingPeers := make([]PeerPathEntry, len(p.data))
-	for _, v := range p.data {
+	potentialConflictingPeers := make([]PeerPathEntry, len(p.Data))
+	for _, v := range p.Data {
 		potentialConflictingPeers = append(potentialConflictingPeers, v)
 	}
 	potentialConflictingPeers = sortPeerPathEntries(potentialConflictingPeers)
@@ -150,12 +150,12 @@ func (p *PathSelectionStore) AddPeerEntry(entry PeerPathEntry) {
 
 	// Filter self containing paths for conflicts
 	entry.UsedPaths = getConflictFreePaths(entry)
-	p.data[entry.PeerAddrStr] = entry
+	p.Data[entry.PeerAddrStr] = entry
 
 }
 
 func (p *PathSelectionStore) filterByMinimumUsedPaths(entries []PeerPathEntry, minUsedPath int) []PeerPathEntry {
-	newEntries := make([]PeerPathEntry, len(p.data))
+	newEntries := make([]PeerPathEntry, len(p.Data))
 	for _, entry := range entries {
 		if len(entry.UsedPaths) >= minUsedPath {
 			newEntries = append(newEntries, entry)

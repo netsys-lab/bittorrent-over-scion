@@ -33,6 +33,7 @@ import (
 type ExtPeer struct {
 	sock      *smp.MPPeerSock
 	selection *ServerSelection
+	id        string
 }
 
 // A Client is a TCP connection with a peer
@@ -301,6 +302,7 @@ func (s *Server) ListenHandshake() error {
 			s.updateDisjointPathselection(ExtPeer{
 				sock:      mpSock,
 				selection: sel,
+				id:        remote.String(),
 			})
 
 			err = mpSock.Connect(sel, &socket.ConnectOptions{
@@ -363,6 +365,19 @@ func (s *Server) ListenHandshake() error {
 			wg.Wait()
 			mpSock.Disconnect()
 			log.Infof("Disconnected %s", remote.String())
+			s.Lock()
+			// TODO: Update pathselection
+			delete(s.pathStore.Data, remote.String())
+			newPeers := make([]ExtPeer, 0)
+			for _, p := range s.extPeers {
+				if p.id != remote.String() {
+					newPeers = append(newPeers, p)
+				} else {
+					log.Debugf("Remove peer %s from list", remote.String())
+				}
+			}
+			s.extPeers = newPeers
+			s.Unlock()
 		}(remote, startPort)
 
 	}
