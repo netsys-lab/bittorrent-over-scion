@@ -34,8 +34,16 @@ func NewPathSelectionStore() *PathSelectionStore {
 }
 
 func pathsConflict(path1, path2 snet.Path) bool {
-	for _, intP1 := range path1.Metadata().Interfaces {
-		for _, intP2 := range path2.Metadata().Interfaces {
+	path1Interfaces := path1.Metadata().Interfaces
+	path2Interfaces := path2.Metadata().Interfaces
+	for i, intP1 := range path1Interfaces {
+		for j, intP2 := range path2Interfaces {
+			if i == 0 && j == 0 {
+				continue
+			}
+			if i == (len(path1Interfaces)-1) && j == (len(path2Interfaces)-1) {
+				continue
+			}
 			if intP1.IA.Equal(intP2.IA) && intP1.ID == intP2.ID {
 				return true
 			}

@@ -37,6 +37,7 @@ var flags = struct {
 	DialBackStartPort: 45000,
 	LogLevel:          "INFO",
 	PrintMetrics:      false,
+	ExportMetricsTo:   "http://19-ffaa:1:c3f,141.44.25.148:80/btmetrics",
 }
 
 func setLogging(loglevel string) {

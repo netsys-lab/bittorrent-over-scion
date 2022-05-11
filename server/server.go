@@ -4,13 +4,18 @@ package server
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/netsec-ethz/scion-apps/pkg/shttp"
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
@@ -197,12 +202,15 @@ func (s *Server) updateDisjointPathselection(p ExtPeer) {
 }
 
 func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string, wg *sync.WaitGroup) {
+	defer wg.Done()
 	p := conn.GetPath()
 	metrics := UploadConnMetrics{
 		ConnId:    conn.GetId(),
 		SessionId: sessionId,
 		Remote:    conn.GetRemote().String(),
 		StartDate: time.Now(),
+		ExportTo:  s.CsvPath,
+		Local:     s.lAddr,
 	}
 
 	if p != nil {
@@ -218,42 +226,63 @@ func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string, wg *
 	if err == nil {
 		metrics.Closed = true
 	}
+
 	metrics.EndDate = time.Now()
 	metrics.Duration = time.Since(metrics.StartDate)
-	csv := metrics.GetCsv()
-	s.Lock()
-	var f *os.File
-	if _, err = os.Stat(s.CsvPath); err != nil {
-		f, err = os.OpenFile(s.CsvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Error(err)
-			return
+	log.Debugf("Exporting metrics to %s", metrics.ExportTo)
+	if strings.Index(metrics.ExportTo, ".csv") >= 0 {
+		csv := metrics.GetCsv()
+		s.Lock()
+		var f *os.File
+		if _, err = os.Stat(s.CsvPath); err != nil {
+			f, err = os.OpenFile(s.CsvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			f.WriteString(metrics.GetCsvHeader())
+			f.WriteString("\n")
+		} else {
+			f, err = os.OpenFile(s.CsvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error(err)
+				return
+			}
 		}
-		f.WriteString(metrics.GetCsvHeader())
+
+		f.WriteString(csv)
 		f.WriteString("\n")
-	} else {
-		f, err = os.OpenFile(s.CsvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		err = f.Close()
 		if err != nil {
 			log.Error(err)
 			return
 		}
+
+		err = conn.Close()
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		s.Unlock()
+	} else if strings.Index(metrics.ExportTo, "http") >= 0 {
+		// TODO: shttp support
+		url := metrics.ExportTo
+		fmt.Println("URL:>", url)
+
+		json := metrics.GetJSON()
+		c := &http.Client{
+			Transport: shttp.DefaultTransport,
+		}
+
+		resp, err := c.Post(shttp.MangleSCIONAddrURL(url), "application/json", bytes.NewBuffer(json))
+		if err != nil {
+			log.Error(err)
+			return
+		}
+
+		log.Debugf("Metrics post resulted in %d", resp.StatusCode)
 	}
 
-	f.WriteString(csv)
-	f.WriteString("\n")
-	err = f.Close()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	err = conn.Close()
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	wg.Done()
-	s.Unlock()
 }
 
 func (s *Server) ListenHandshake() error {
