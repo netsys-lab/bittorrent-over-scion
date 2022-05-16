@@ -5,9 +5,16 @@ package server
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/binary"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go"
 	"github.com/netsec-ethz/scion-apps/pkg/shttp"
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
@@ -59,6 +67,7 @@ type Server struct {
 	pathStore         *ps.PathSelectionStore
 	extPeers          []ExtPeer
 	CsvPath           string
+	config            *ServerConfig
 	sync.Mutex
 }
 
@@ -101,7 +110,9 @@ func (s *ServerSelection) CustomPathSelectAlg(pathSet *pathselection.PathSet) (*
 }
 
 type ServerConfig struct {
-	LAddr                       string
+	LocalSCIONAddr              string
+	LocalTCPAddr                string
+	LocalQUICAddr               string
 	TorrentFile                 *torrentfile.TorrentFile
 	PathSelectionResponsibility string
 	NumPaths                    int
@@ -119,10 +130,10 @@ func NewServer(config *ServerConfig) (*Server, error) {
 
 	var localAddr *snet.UDPAddr
 	var err error
-	if config.LAddr == "" {
+	if config.LocalSCIONAddr == "" {
 		localAddr, err = util.GetDefaultLocalAddr()
 	} else {
-		localAddr, err = snet.ParseUDPAddr(config.LAddr)
+		localAddr, err = snet.ParseUDPAddr(config.LocalSCIONAddr)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +142,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 	s := &Server{
 		peers:             peers.NewPeerSet(0),
 		Conns:             make([]packets.UDPConn, 0),
-		lAddr:             config.LAddr,
+		lAddr:             config.LocalSCIONAddr,
 		localAddr:         localAddr,
 		torrentFile:       config.TorrentFile,
 		NumPaths:          config.NumPaths,
@@ -140,6 +151,7 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		pathStore:         ps.NewPathSelectionStore(),
 		extPeers:          make([]ExtPeer, 0),
 		CsvPath:           config.ExportMetricsTarget,
+		config:            config,
 	}
 
 	s.Bitfield = make([]byte, len(config.TorrentFile.PieceHashes))
@@ -285,7 +297,7 @@ func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string, wg *
 
 }
 
-func (s *Server) ListenHandshake() error {
+func (s *Server) ListenHandshakeSCION() error {
 	var err error
 
 	mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
@@ -408,7 +420,147 @@ func (s *Server) ListenHandshake() error {
 	}
 }
 
-func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) error {
+// Setup a bare-bones TLS config for the server
+func generateTLSConfig() *tls.Config {
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		panic(err)
+	}
+	template := x509.Certificate{SerialNumber: big.NewInt(1)}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		panic(err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		NextProtos:   []string{"quic-echo-example"},
+	}
+}
+
+type WrappedStream struct {
+	stream quic.Stream
+	local  string
+	remote string
+}
+
+func (w *WrappedStream) Read(b []byte) (n int, err error) {
+	return w.stream.Read(b)
+}
+
+func (w *WrappedStream) Write(b []byte) (n int, err error) {
+	return w.stream.Write(b)
+}
+
+func (w *WrappedStream) Close() error {
+	return w.stream.Close()
+}
+
+func (w *WrappedStream) LocalAddr() net.Addr {
+	addr, _ := net.ResolveTCPAddr("TCP", w.local)
+	return addr
+}
+
+func (w *WrappedStream) RemoteAddr() net.Addr {
+	addr, _ := net.ResolveTCPAddr("TCP", w.remote)
+	return addr
+}
+
+func (w *WrappedStream) SetDeadline(t time.Time) error {
+	return w.stream.SetDeadline(t)
+}
+
+func (w *WrappedStream) SetReadDeadline(t time.Time) error {
+	return w.stream.SetReadDeadline(t)
+}
+
+func (w *WrappedStream) SetWriteDeadline(t time.Time) error {
+	return w.stream.SetWriteDeadline(t)
+}
+
+func (s *Server) ListenHandshakeQUIC() error {
+	listener, err := quic.ListenAddr(s.config.LocalQUICAddr, generateTLSConfig(), nil)
+	if err != nil {
+		return err
+	}
+	for {
+		conn, err := listener.Accept(context.Background())
+		if err != nil {
+			return err
+		}
+		stream, err := conn.AcceptStream(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		wStream := &WrappedStream{
+			stream: stream,
+			local:  s.config.LocalQUICAddr,
+			remote: conn.RemoteAddr().String(),
+		}
+		go func(conn net.Conn) {
+			err := s.handleConnection(conn, true)
+			if err != nil {
+				log.Error(err)
+			}
+		}(wStream)
+	}
+}
+
+func (s *Server) ListenHandshakeTCP() error {
+	server, err := net.Listen("tcp", s.config.LocalTCPAddr)
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+	for {
+		connection, err := server.Accept()
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		go func(conn net.Conn) {
+			err := s.handleConnection(conn, true)
+			if err != nil {
+				log.Error(err)
+			}
+		}(connection)
+	}
+
+}
+
+func (s *Server) ListenHandshake() error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var err error
+	// TODO: What about errors here?
+	go func() {
+		err = s.ListenHandshakeSCION()
+		log.Error(err)
+		wg.Done()
+	}()
+	// TODO: What about errors here?
+	go func() {
+		err = s.ListenHandshakeTCP()
+		log.Error(err)
+		wg.Done()
+	}()
+	// TODO: What about errors here?
+	go func() {
+		err = s.ListenHandshakeQUIC()
+		log.Error(err)
+		wg.Done()
+	}()
+	wg.Wait()
+	return err
+}
+
+func (s *Server) handleConnection(conn net.Conn, waitForHandshake bool) error {
 	if waitForHandshake {
 		s.handleIncomingHandshake(conn)
 	}
@@ -451,6 +603,7 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 				log.Info("got port message but dht is not enabled")
 				break
 			}
+			/* TODO: Enable Dht
 			remote := conn.GetRemote()
 			if remote == nil {
 				log.Error("could not get remote from port message")
@@ -466,11 +619,12 @@ func (s *Server) handleConnection(conn packets.UDPConn, waitForHandshake bool) e
 			log.Debugf("sending dht ping to %s",
 				remoteDht)
 			go s.dhtNode.Node.Ping(remoteDht)
+			*/
 		}
 	}
 }
 
-func (s *Server) handleIncomingHandshake(conn packets.UDPConn) error {
+func (s *Server) handleIncomingHandshake(conn net.Conn) error {
 	hs, err := handshake.Read(conn)
 	if err != nil {
 		return err

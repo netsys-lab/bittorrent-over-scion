@@ -95,7 +95,7 @@ func main() {
 		log.Info("Loaded file to RAM")
 		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
 		conf := server.ServerConfig{
-			LAddr:                       flags.Local,
+			LocalSCIONAddr:              flags.Local,
 			TorrentFile:                 &tf,
 			PathSelectionResponsibility: "server",
 			NumPaths:                    flags.NumPaths,

@@ -7,8 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-
-	"github.com/netsys-lab/scion-path-discovery/packets"
+	"net"
 )
 
 type messageID uint8
@@ -142,7 +141,7 @@ func (m *Message) Serialize() []byte {
 }
 
 // Read parses a message from a stream. Returns `nil` on keep-alive message
-func Read(r packets.UDPConn) (*Message, error) {
+func Read(r net.Conn) (*Message, error) {
 	lengthBuf := make([]byte, 4)
 	// fmt.Printf("%p: Wait for 4 first bytes\n", r)
 	_, err := io.ReadFull(r, lengthBuf)
