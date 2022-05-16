@@ -25,11 +25,11 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/netsec-ethz/scion-apps/pkg/shttp"
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
-	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
 	"github.com/netsys-lab/bittorrent-over-scion/handshake"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
+	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	ps "github.com/netsys-lab/bittorrent-over-scion/pathselection"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
@@ -51,14 +51,14 @@ type ExtPeer struct {
 
 // A Client is a TCP connection with a peer
 type Server struct {
-	Conns             []packets.UDPConn
-	Choked            bool
-	peers             peers.PeerSet
-	infoHash          [20]byte
-	lAddr             string
-	localAddr         *snet.UDPAddr
-	listener          *net.Listener
-	Bitfield          bitfield.Bitfield
+	Conns     []packets.UDPConn
+	Choked    bool
+	peers     peers.PeerSet
+	infoHash  [20]byte
+	lAddr     string
+	localAddr *snet.UDPAddr
+	listener  *net.Listener
+	// Bitfield          bitfield.Bitfield
 	torrentFile       *torrentfile.TorrentFile
 	NumPaths          int
 	DialBackStartPort int
@@ -152,11 +152,6 @@ func NewServer(config *ServerConfig) (*Server, error) {
 		extPeers:          make([]ExtPeer, 0),
 		CsvPath:           config.ExportMetricsTarget,
 		config:            config,
-	}
-
-	s.Bitfield = make([]byte, len(config.TorrentFile.PieceHashes))
-	for i := range config.TorrentFile.PieceHashes {
-		s.Bitfield.SetPiece(i)
 	}
 
 	if config.DiscoveryConfig.EnableDht {
@@ -595,7 +590,9 @@ func (s *Server) handleIncomingHandshake(conn net.Conn) error {
 		return err
 	}
 
-	msg := message.Message{ID: message.MsgBitfield, Payload: s.Bitfield}
+	bitfield := p2p.Bitfields[hs.InfoHash]
+
+	msg := message.Message{ID: message.MsgBitfield, Payload: bitfield}
 	_, err = conn.Write(msg.Serialize())
 	if err != nil {
 		return err

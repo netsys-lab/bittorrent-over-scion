@@ -21,12 +21,22 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/client"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
 	"github.com/netsys-lab/bittorrent-over-scion/message"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 )
+
+// TODO: Make these things threadsafe...
+var Torrents map[[20]byte]*Torrent
+var Bitfields map[[20]byte]bitfield.Bitfield
+
+func init() {
+	Torrents = make(map[[20]byte]*Torrent, 0)
+	Bitfields = make(map[[20]byte]bitfield.Bitfield, 0)
+}
 
 // KiB number of bytes of a kibibyte
 const KiB = 1024
@@ -206,9 +216,8 @@ func (t *Torrent) downloadQUIC(peer peers.Peer) {
 	}
 
 	c := client.Client{
-		NetConn: wStream,
-		Choked:  false,
-		// Bitfield:        clients[0].Bitfield, TODO: Fetch from state
+		NetConn:         wStream,
+		Choked:          false,
 		Peer:            peer,
 		InfoHash:        t.InfoHash,
 		PeerID:          t.PeerID,
@@ -237,6 +246,8 @@ func (t *Torrent) downloadQUIC(peer peers.Peer) {
 
 		c.SendHave(pw.index)
 		t.results <- &pieceResult{pw.index, buf}
+		Bitfields[t.InfoHash].SetPiece(pw.index)
+		// TODO: Update in Bitfield
 	}
 }
 
@@ -280,6 +291,8 @@ func (t *Torrent) downloadTCP(peer peers.Peer) {
 
 		c.SendHave(pw.index)
 		t.results <- &pieceResult{pw.index, buf}
+		Bitfields[t.InfoHash].SetPiece(pw.index)
+		// TODO: Update in Bitfield
 	}
 }
 
@@ -356,6 +369,8 @@ func (t *Torrent) downloadSCION(peer peers.Peer) {
 
 								c.SendHave(pw.index)
 								t.results <- &pieceResult{pw.index, buf}
+								Bitfields[t.InfoHash].SetPiece(pw.index)
+								// TODO: Update in Bitfield
 							}
 						}(&c)
 					}
@@ -401,6 +416,9 @@ func (t *Torrent) downloadSCION(peer peers.Peer) {
 
 				c.SendHave(pw.index)
 				t.results <- &pieceResult{pw.index, buf}
+				Bitfields[t.InfoHash].SetPiece(pw.index)
+
+				// TODO: Update in Bitfield
 			}
 			wg.Done()
 		}(c)

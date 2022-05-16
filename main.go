@@ -11,13 +11,16 @@ import (
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/netsys-lab/bittorrent-over-scion/bitfield"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/server"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 )
 
 var flags = struct {
-	InPath            string `help:"Path to torrent file that should be processed"`
+	InPath            string `help:"Path to torrent file that should be downloaded"`
+	SeedPath          string `help:"Path to torrent file that should be seeded"` // TODO: Rethink!
 	OutPath           string `help:"Path where BitTorrent writes the downloaded file"`
 	Peer              string `help:"Remote SCION address"`
 	Seed              bool   `help:"Start BitTorrent in Seeder mode"`
@@ -94,39 +97,62 @@ func main() {
 			log.Fatal(err)
 		}
 		log.Info("Loaded file to RAM")
-		// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
-		conf := server.ServerConfig{
-			LocalSCIONAddr:              flags.Local,
-			TorrentFile:                 &tf,
-			PathSelectionResponsibility: "server",
-			NumPaths:                    flags.NumPaths,
-			DialBackPort:                flags.DialBackStartPort,
-			DiscoveryConfig:             &peerDiscoveryConfig,
-			ExportMetricsTarget:         flags.ExportMetricsTo,
-		}
-		server, err := server.NewServer(&conf)
-		if err != nil {
-			log.Fatal(err)
-		}
+	}
 
-		log.Info("Created Server")
+	// Always start server
+	conf := server.ServerConfig{
+		LocalSCIONAddr:              flags.Local,
+		TorrentFile:                 &tf,
+		PathSelectionResponsibility: "server",
+		NumPaths:                    flags.NumPaths,
+		DialBackPort:                flags.DialBackStartPort,
+		DiscoveryConfig:             &peerDiscoveryConfig,
+		ExportMetricsTarget:         flags.ExportMetricsTo,
+	}
+	server, err := server.NewServer(&conf)
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	log.Info("Created Server")
+
+	// TODO: Remove for multi torrent support
+	if flags.Seed {
 		err = server.ListenHandshake()
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		if err != nil {
-			log.Fatal(err)
-		}
 	} else {
-		t, err := tf.DownloadToFile(flags.OutPath, flags.Peer, flags.Local, "server", &peerDiscoveryConfig)
+		go func() {
+			err = server.ListenHandshake()
+			if err != nil {
+				log.Fatal(err)
+			}
+		}()
+
+		t, err := tf.OpenTorrent(flags.OutPath, flags.Peer, flags.Local, "server", &peerDiscoveryConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		// TODO: We only have one bitfield here
+		var bf bitfield.Bitfield
+		bf = make([]byte, len(tf.PieceHashes))
+		for i := range tf.PieceHashes {
+			bf.SetPiece(i)
+		}
+
+		// TODO: Update state in server?
+		p2p.Torrents[t.InfoHash] = t
+		p2p.Bitfields[t.InfoHash] = bf
+
+		err = tf.DownloadTorrent(flags.OutPath, t)
+
+		// TODO: DHT for seeder?
 		if t.DhtNode != nil {
 			t.DhtNode.Close()
 		}
+
 	}
 
 }
