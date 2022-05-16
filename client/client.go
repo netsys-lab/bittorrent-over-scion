@@ -6,6 +6,7 @@ package client
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"time"
 
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
@@ -36,6 +37,7 @@ type Client struct {
 	PeerID          [20]byte
 	DiscoveryConfig *config.PeerDiscoveryConfig
 	DhtNode         *dht_node.DhtNode
+	NetConn         net.Conn
 }
 
 //LastSelection users could add more fields
@@ -62,14 +64,14 @@ func (lastSel *ClientInitiatedSelection) CustomPathSelectAlg(pathSet *pathselect
 
 // send BitTorrent handshake and wait for response, ping remotes DHT Node when existing as specified in BEP5
 func completeHandshake(
-	conn packets.UDPConn,
+	conn net.Conn,
 	infohash, peerID [20]byte,
 	discoveryConfig *config.PeerDiscoveryConfig) (*handshake.Handshake, error) {
 
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
 	defer conn.SetDeadline(time.Time{}) // Disable the deadline
 	// time.Sleep(3 * time.Second)
-	log.Infof("Starting handshake with remote %s...", conn.GetRemote())
+	// log.Infof("Starting handshake with remote %s...", conn.GetRemote())
 	req := handshake.New(infohash, peerID, discoveryConfig.EnableDht)
 
 	_, err := conn.Write(req.Serialize())
@@ -97,7 +99,7 @@ func completeHandshake(
 	return res, nil
 }
 
-func recvBitfield(conn packets.UDPConn) (bitfield.Bitfield, error) {
+func recvBitfield(conn net.Conn) (bitfield.Bitfield, error) {
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
 	defer conn.SetDeadline(time.Time{}) // Disable the deadline
 
@@ -239,13 +241,21 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 	return clients, nil
 }
 
+func (c *Client) conn() net.Conn {
+	if c.NetConn != nil {
+		return c.NetConn
+	}
+
+	return c.Conn
+}
+
 func (c *Client) Handshake() error {
-	_, err := completeHandshake(c.Conn, c.InfoHash, c.PeerID, c.DiscoveryConfig)
+	_, err := completeHandshake(c.conn(), c.InfoHash, c.PeerID, c.DiscoveryConfig)
 	if err != nil {
 		return err
 	}
 
-	c.Bitfield, err = recvBitfield(c.Conn)
+	c.Bitfield, err = recvBitfield(c.conn())
 	if err != nil {
 		return err
 	}
@@ -272,7 +282,7 @@ func (mp *MPClient) WaitForNewClient() (*Client, error) {
 
 // Read reads and consumes a message from the connection
 func (c *Client) Read() (*message.Message, error) {
-	msg, err := message.Read(c.Conn)
+	msg, err := message.Read(c.conn())
 	return msg, err
 }
 
@@ -280,34 +290,34 @@ func (c *Client) Read() (*message.Message, error) {
 func (c *Client) SendRequest(index, begin, length int) error {
 	// fmt.Printf("Requesting %d, %d, %d\n", index, begin, length)
 	req := message.FormatRequest(index, begin, length)
-	_, err := c.Conn.Write(req.Serialize())
+	_, err := c.conn().Write(req.Serialize())
 	return err
 }
 
 // SendInterested sends an Interested message to the peer
 func (c *Client) SendInterested() error {
 	msg := message.Message{ID: message.MsgInterested}
-	_, err := c.Conn.Write(msg.Serialize())
+	_, err := c.conn().Write(msg.Serialize())
 	return err
 }
 
 // SendNotInterested sends a NotInterested message to the peer
 func (c *Client) SendNotInterested() error {
 	msg := message.Message{ID: message.MsgNotInterested}
-	_, err := c.Conn.Write(msg.Serialize())
+	_, err := c.conn().Write(msg.Serialize())
 	return err
 }
 
 // SendUnchoke sends an Unchoke message to the peer
 func (c *Client) SendUnchoke() error {
 	msg := message.Message{ID: message.MsgUnchoke}
-	_, err := c.Conn.Write(msg.Serialize())
+	_, err := c.conn().Write(msg.Serialize())
 	return err
 }
 
 // SendHave sends a Have message to the peer
 func (c *Client) SendHave(index int) error {
 	msg := message.FormatHave(index)
-	_, err := c.Conn.Write(msg.Serialize())
+	_, err := c.conn().Write(msg.Serialize())
 	return err
 }

@@ -444,46 +444,6 @@ func generateTLSConfig() *tls.Config {
 	}
 }
 
-type WrappedStream struct {
-	stream quic.Stream
-	local  string
-	remote string
-}
-
-func (w *WrappedStream) Read(b []byte) (n int, err error) {
-	return w.stream.Read(b)
-}
-
-func (w *WrappedStream) Write(b []byte) (n int, err error) {
-	return w.stream.Write(b)
-}
-
-func (w *WrappedStream) Close() error {
-	return w.stream.Close()
-}
-
-func (w *WrappedStream) LocalAddr() net.Addr {
-	addr, _ := net.ResolveTCPAddr("TCP", w.local)
-	return addr
-}
-
-func (w *WrappedStream) RemoteAddr() net.Addr {
-	addr, _ := net.ResolveTCPAddr("TCP", w.remote)
-	return addr
-}
-
-func (w *WrappedStream) SetDeadline(t time.Time) error {
-	return w.stream.SetDeadline(t)
-}
-
-func (w *WrappedStream) SetReadDeadline(t time.Time) error {
-	return w.stream.SetReadDeadline(t)
-}
-
-func (w *WrappedStream) SetWriteDeadline(t time.Time) error {
-	return w.stream.SetWriteDeadline(t)
-}
-
 func (s *Server) ListenHandshakeQUIC() error {
 	listener, err := quic.ListenAddr(s.config.LocalQUICAddr, generateTLSConfig(), nil)
 	if err != nil {
@@ -498,10 +458,10 @@ func (s *Server) ListenHandshakeQUIC() error {
 		if err != nil {
 			panic(err)
 		}
-		wStream := &WrappedStream{
-			stream: stream,
-			local:  s.config.LocalQUICAddr,
-			remote: conn.RemoteAddr().String(),
+		wStream := &util.WrappedStream{
+			Stream: stream,
+			Local:  s.config.LocalQUICAddr,
+			Remote: conn.RemoteAddr().String(),
 		}
 		go func(conn net.Conn) {
 			err := s.handleConnection(conn, true)

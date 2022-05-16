@@ -1,4 +1,5 @@
 package peers
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -6,10 +7,27 @@ import (
 	"fmt"
 )
 
+var PeerTypes = newPeerTypes()
+
+func newPeerTypes() *peerType {
+	return &peerType{
+		SCION: 1,
+		TCP:   2,
+		QUIC:  3,
+	}
+}
+
+type peerType struct {
+	SCION int
+	TCP   int
+	QUIC  int
+}
+
 // Peer encodes connection information for a peer
 type Peer struct {
 	Addr  string
 	Index int
+	Type  int
 }
 
 // Unmarshal parses peer IP addresses and ports from a buffer

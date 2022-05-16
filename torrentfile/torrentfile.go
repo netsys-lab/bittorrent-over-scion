@@ -1,4 +1,5 @@
 package torrentfile
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -63,6 +64,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 	}
 
 	targetPeers := peers.NewPeerSet(0)
+	// TODO: Implement actual downloading over TCP/QUIC
 	if peer != "" {
 		_, err := snet.ParseUDPAddr(peer)
 		if err != nil {
@@ -73,6 +75,7 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 		p := peers.Peer{
 			Addr:  peer,
 			Index: 0,
+			Type:  peers.PeerTypes.SCION,
 		}
 		targetPeers.Add(p)
 

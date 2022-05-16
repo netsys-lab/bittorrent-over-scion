@@ -5,17 +5,22 @@ package p2p
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
+	"github.com/lucas-clemente/quic-go"
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/netsys-lab/scion-path-discovery/pathselection"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 
+	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/client"
 	"github.com/netsys-lab/bittorrent-over-scion/config"
 	"github.com/netsys-lab/bittorrent-over-scion/dht_node"
@@ -176,7 +181,109 @@ func checkIntegrity(pw *pieceWork, buf []byte) error {
 	return nil
 }
 
-func (t *Torrent) startDownloadWorker(peer peers.Peer) {
+func (t *Torrent) downloadQUIC(peer peers.Peer) {
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"quic-echo-example"},
+	}
+	conn, err := quic.DialAddr(peer.Addr, tlsConf, nil)
+	if err != nil {
+		log.Errorf("Failed to dial to %s", peer.Addr)
+		log.Error(err)
+		return
+	}
+
+	stream, err := conn.OpenStreamSync(context.Background())
+	if err != nil {
+		log.Errorf("Failed to open stream to to %s", peer.Addr)
+		log.Error(err)
+		return
+	}
+	wStream := &util.WrappedStream{
+		Stream: stream,
+		Local:  t.Local,
+		Remote: peer.Addr,
+	}
+
+	c := client.Client{
+		NetConn: wStream,
+		Choked:  false,
+		// Bitfield:        clients[0].Bitfield, TODO: Fetch from state
+		Peer:            peer,
+		InfoHash:        t.InfoHash,
+		PeerID:          t.PeerID,
+		DiscoveryConfig: t.DiscoveryConfig,
+	}
+
+	err = c.Handshake()
+	if err != nil {
+		log.Errorf("Failed to handshake to %s", peer.Addr)
+		log.Error(err)
+		return
+	}
+	for pw := range t.workQueue {
+		if !c.Bitfield.HasPiece(pw.index) {
+			t.workQueue <- pw // Put piece back on the queue
+			continue
+		}
+
+		// Download the piece
+		buf, err := attemptDownloadPiece(&c, pw)
+		if err != nil {
+			log.Warn("Error downloading piece", err)
+			t.workQueue <- pw // Put piece back on the queue
+			return
+		}
+
+		c.SendHave(pw.index)
+		t.results <- &pieceResult{pw.index, buf}
+	}
+}
+
+func (t *Torrent) downloadTCP(peer peers.Peer) {
+	connection, err := net.Dial("tcp", peer.Addr)
+	if err != nil {
+		log.Errorf("Failed to dial to %s", peer.Addr)
+		log.Error(err)
+		return
+	}
+
+	c := client.Client{
+		NetConn: connection,
+		Choked:  false,
+		// Bitfield:        clients[0].Bitfield, TODO: Fetch from state
+		Peer:            peer,
+		InfoHash:        t.InfoHash,
+		PeerID:          t.PeerID,
+		DiscoveryConfig: t.DiscoveryConfig,
+	}
+
+	err = c.Handshake()
+	if err != nil {
+		log.Errorf("Failed to handshake to %s", peer.Addr)
+		log.Error(err)
+		return
+	}
+	for pw := range t.workQueue {
+		if !c.Bitfield.HasPiece(pw.index) {
+			t.workQueue <- pw // Put piece back on the queue
+			continue
+		}
+
+		// Download the piece
+		buf, err := attemptDownloadPiece(&c, pw)
+		if err != nil {
+			log.Warn("Error downloading piece", err)
+			t.workQueue <- pw // Put piece back on the queue
+			return
+		}
+
+		c.SendHave(pw.index)
+		t.results <- &pieceResult{pw.index, buf}
+	}
+}
+
+func (t *Torrent) downloadSCION(peer peers.Peer) {
 	mpC := client.NewMPClient()
 	var clients []*client.Client
 	var err error
@@ -315,6 +422,17 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 		log.Info("No further pieces, done")
 		return
 	}
+}
+
+func (t *Torrent) startDownloadWorker(peer peers.Peer) {
+	if peer.Type == peers.PeerTypes.SCION {
+		t.downloadSCION(peer)
+	} else if peer.Type == peers.PeerTypes.TCP {
+		t.downloadTCP(peer)
+	} else {
+		t.downloadQUIC(peer)
+	}
+
 }
 
 func (t *Torrent) calculateBoundsForPiece(index int) (begin int, end int) {

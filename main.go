@@ -64,6 +64,7 @@ func setLogging(loglevel string) {
 	}
 }
 
+// TODO: Implement TCP/QUIC peer adding
 func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
