@@ -48,7 +48,7 @@ At least the following command line flags are required:
 Run `bittorrent-over-scion -h` to get a full overview of all command line flags and their explanations.
 
 ### Demo Torrent
-We provide a running seeder and a sample torrent file in the [demo](https://github.com/netsys-lab/bittorrent-over-scion/demo) folder. Please visit the readme for further information.
+We provide a running seeder and a sample torrent file in the [demo](https://github.com/netsys-lab/bittorrent-over-scion/tree/master/demo) folder. Please visit the readme for further information.
 
 ## Roadmap
 - [ ] Support SCION HTTP tracker
