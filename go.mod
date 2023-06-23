@@ -10,6 +10,7 @@ require (
 	github.com/anacrolix/tagflag v1.3.0
 	github.com/anacrolix/torrent v1.30.2
 	github.com/jackpal/bencode-go v1.0.0
+	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lucas-clemente/quic-go v0.21.1
 	github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f
 	github.com/netsys-lab/dht v0.1.18
@@ -18,6 +19,8 @@ require (
 	github.com/scionproto/scion v0.6.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
+	gorm.io/driver/sqlite v1.5.2
+	gorm.io/gorm v1.25.2-0.20230530020048-26663ab9bf55
 )
 
 require (
@@ -51,11 +54,14 @@ require (
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645 // indirect
 	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/inconshreveable/log15 v0.0.0-20180818164646-67afb5ed74ec // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/marten-seemann/qtls-go1-15 v0.1.4 // indirect
 	github.com/marten-seemann/qtls-go1-16 v0.1.3 // indirect
 	github.com/marten-seemann/qtls-go1-17 v0.1.0-beta.1.2 // indirect
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
+	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/netsec-ethz/rains v0.2.0 // indirect
 	github.com/netsys-lab/scion-optimized-connection v0.4.2-0.20220107124242-cc4b4825db7f // indirect

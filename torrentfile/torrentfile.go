@@ -1,4 +1,5 @@
 package torrentfile
+
 // SPDX-FileCopyrightText:  2019 NetSys Lab
 // SPDX-License-Identifier: GPL-3.0-only
 
@@ -8,6 +9,7 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/jackpal/bencode-go"
@@ -129,6 +131,15 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 	return &torrent, nil
 }
 
+func Parse(reader io.Reader) (TorrentFile, error) {
+	bto := &bencodeTorrent{}
+	err := bencode.Unmarshal(reader, bto)
+	if err != nil {
+		return TorrentFile{}, err
+	}
+	return bto.toTorrentFile()
+}
+
 // Open parses a torrent file
 func Open(path string) (TorrentFile, error) {
 	file, err := os.Open(path)
@@ -138,13 +149,7 @@ func Open(path string) (TorrentFile, error) {
 		return TorrentFile{}, err
 	}
 	defer file.Close()
-
-	bto := bencodeTorrent{}
-	err = bencode.Unmarshal(file, &bto)
-	if err != nil {
-		return TorrentFile{}, err
-	}
-	return bto.toTorrentFile()
+	return Parse(file)
 }
 
 func (i *bencodeInfo) hash() ([20]byte, error) {

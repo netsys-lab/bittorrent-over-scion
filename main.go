@@ -4,6 +4,7 @@ package main
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
+	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
 	"io/ioutil"
 
 	"github.com/anacrolix/tagflag"
@@ -12,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/http_api"
 	"github.com/netsys-lab/bittorrent-over-scion/server"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 )
@@ -23,6 +25,8 @@ var flags = struct {
 	Seed              bool   `help:"Start BitTorrent in Seeder mode"`
 	File              string `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
 	Local             string `help:"Local SCION address of the seeder"`
+	HttpApi           bool   `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
+	HttpApiPort       int    `help:"Optional: Configure the port the HTTP API will listen on. Only for httpApi=true"`
 	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
 	DialBackStartPort int    `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
 	LogLevel          string `help:"Optional: Change log level"`
@@ -33,6 +37,8 @@ var flags = struct {
 	ExportMetricsTo   string `help:"Optional: Export per-path metrics to a particular target, at the moment a csv file (e.g. /tmp/metrics.csv)"`
 }{
 	Seed:              false,
+	HttpApi:           false,
+	HttpApiPort:       8000,
 	NumPaths:          0,
 	DialBackStartPort: 45000,
 	LogLevel:          "INFO",
@@ -68,6 +74,38 @@ func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
 
+	if flags.HttpApi {
+		log.Info("Starting in HTTP API mode...")
+
+		log.Info("[HTTP API] Initializing storage...")
+		storage_ := &storage.Storage{DbBackend: storage.Sqlite}
+		err := storage_.Init("file::memory:?cache=shared") // in-memory SQLite database
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Info("[HTTP API] Loading existing torrent tasks from storage...")
+		api := http_api.HttpApi{
+			Port:      flags.HttpApiPort,
+			EnableDht: flags.EnableDht,
+			Storage:   storage_,
+			LocalHost: flags.Local,
+		}
+		err = api.LoadFromStorage()
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Info("[HTTP API] Starting web server...")
+		err = api.ListenAndServe()
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+	}
+
 	log.Infof("Input %s, Output %s, Peer %s, seed %t, file %s", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
@@ -85,6 +123,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Debugf("TorrentFile{Announce: \"%s\", Length: %d, Name: \"%s\", PieceLength: %d}", tf.Announce, tf.Length, tf.Name, tf.PieceLength)
+
 	tf.PrintMetrics = flags.PrintMetrics
 	if flags.Seed {
 		log.Info("Loading file to RAM...")

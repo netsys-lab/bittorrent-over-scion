@@ -55,6 +55,14 @@ paths:
                 torrentFile:
                   type: string
                   format: binary
+                peer:
+                  type: string
+              required:
+                - torrentFile
+                - peer
+              example:
+                torrentFile: "<file>"
+                peer: "19-ffaa:1:106d,[127.0.0.1]:43000"
       responses:
         '201':
           description: created successfully
@@ -130,6 +138,12 @@ paths:
           schema:
             type: integer
             format: uint
+        - name: deleteFiles
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Set to true if files (downloaded files, torrent file) shall be deleted from disk as well
       responses:
         '200':
           description: deleted successfully
@@ -138,13 +152,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Torrent'
         '400':
-          description: invalid ID specified
+          description: invalid value specified
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
           description: torrent with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: torrent is running, stop it before deletion
           content:
             application/json:
               schema:
