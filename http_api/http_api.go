@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/rs/cors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -228,8 +229,10 @@ func (api *HttpApi) ListenAndServe() error {
 	router.ServeFiles("/frontend/*filepath", AssetFile())
 
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", api.Port),
-		Handler: router,
+		Addr: fmt.Sprintf(":%d", api.Port),
+		Handler: cors.New(cors.Options{
+			AllowedMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
+		}).Handler(router),
 		BaseContext: func(listener net.Listener) context.Context {
 			return context.WithValue(context.Background(), "api", api)
 		},

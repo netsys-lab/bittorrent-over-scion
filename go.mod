@@ -16,6 +16,7 @@ require (
 	github.com/netsys-lab/dht v0.1.18
 	github.com/netsys-lab/scion-path-discovery v1.0.1
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
+	github.com/rs/cors v1.9.0
 	github.com/scionproto/scion v0.6.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
