@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -19,6 +20,7 @@ func (state State) String() string {
 		"running",
 		"failed",
 		"completed",
+		"cancelled",
 	}[state]
 }
 
@@ -39,24 +41,32 @@ const (
 )
 
 type File struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	TorrentID uint   `json:"-"`
-	Path      string `json:"path"`
+	ID        uint64 `gorm:"primaryKey" json:"id"`
+	TorrentID uint64 `json:"-"`
+
+	Path   string `json:"path"`
+	Length uint64 `json:"length"`
 }
 
 type Torrent struct {
+	/* persisted in database */
+
 	// gorm.Model without DeletedAt
-	ID        uint      `gorm:"primaryKey" json:"id"`
+	ID        uint64    `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"-"`
 	UpdatedAt time.Time `json:"-"`
 
-	FriendlyName string `json:"name"`
-	Peer         string `json:"peer"`
-	State        State  `json:"-"`
-	Status       string `json:"status"`
-	Files        []File `json:"files"`
+	// own attributes
+	FriendlyName   string `json:"name"`
+	Peer           string `json:"peer"`
+	State          State  `json:"-"`
+	Status         string `json:"status"`
+	Files          []File `json:"files"`
+	RawTorrentFile []byte `json:"-"`
 
+	/* only in memory */
 	TorrentFile *torrentfile.TorrentFile `gorm:"-" json:"-"`
+	P2pTorrent  *p2p.Torrent             `gorm:"-" json:"-"`
 	CancelFunc  *context.CancelFunc      `gorm:"-" json:"-"`
 }
 

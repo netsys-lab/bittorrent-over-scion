@@ -10,8 +10,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
@@ -23,14 +25,14 @@ type HttpApi struct {
 	EnableDht bool
 	Storage   *storage.Storage
 	LocalHost string
-	torrents  map[uint]*storage.Torrent
+	torrents  map[uint64]*storage.Torrent
 }
 
 type ErrorResponseBody struct {
 	Error string `json:"error"`
 }
 
-func getInfoHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func getInfoHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 	defaultHandler(w, &struct {
 		Version string `json:"version"`
 	}{
@@ -45,18 +47,63 @@ func listTorrentsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 
 func getTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 0)
+	id, err := strconv.ParseUint(p.ByName("torrent"), 10, 0)
 	if err != nil {
 		errorHandler(w, http.StatusBadRequest, "invalid ID specified")
 		return
 	}
 
-	torrent, exists := api.torrents[uint(id)]
+	torrent, exists := api.torrents[id]
 	if !exists {
 		errorHandler(w, http.StatusNotFound, "torrent with given ID not found")
 		return
 	}
 	defaultHandler(w, torrent)
+}
+
+func getFileByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+
+	torrentId, err := strconv.ParseUint(p.ByName("torrent"), 10, 0)
+	if err != nil {
+		errorHandler(w, http.StatusBadRequest, "invalid torrent ID specified")
+		return
+	}
+
+	torrent, exists := api.torrents[torrentId]
+	if !exists {
+		errorHandler(w, http.StatusNotFound, "torrent with given ID not found")
+		return
+	}
+
+	// to serve torrent file instead
+	if p.ByName("file") == "torrent" {
+		// make downloadable
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%d.torrent", torrent.ID))
+
+		// serve file
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(torrent.RawTorrentFile))
+		return
+	}
+
+	fileId, err := strconv.ParseUint(p.ByName("file"), 10, 0)
+	if err != nil {
+		errorHandler(w, http.StatusBadRequest, "invalid file ID specified")
+		return
+	}
+
+	for _, file := range torrent.Files {
+		if file.ID == fileId {
+			// make downloadable
+			w.Header().Set("Content-Disposition", "attachment; filename="+filepath.Base(file.Path))
+
+			// serve file
+			http.ServeFile(w, r, torrent.GetFileDir(api.Storage.FS)+"/"+file.Path)
+			return
+		}
+	}
+
+	errorHandler(w, http.StatusNotFound, "file with given ID not found")
 }
 
 func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -100,15 +147,18 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 
 	// construct Torrent object
 	torrent := &storage.Torrent{
-		// part of database
+		// persisted in database
 		FriendlyName: fileHdr.Filename,
 		State:        storage.StateNotStartedYet,
 		Peer:         peer,
+		//TODO multiple files per torrent
 		Files: []storage.File{
 			{
-				Path: torrentFile.Name,
+				Path:   torrentFile.Name,
+				Length: uint64(torrentFile.Length),
 			},
 		},
+		RawTorrentFile: fileBuf,
 
 		// only in-memory
 		TorrentFile: &torrentFile,
@@ -136,7 +186,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 
 func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
-	id, err := strconv.ParseUint(p.ByName("id"), 10, 0)
+	id, err := strconv.ParseUint(p.ByName("torrent"), 10, 0)
 	if err != nil {
 		errorHandler(w, http.StatusBadRequest, "invalid ID specified")
 		return
@@ -151,7 +201,7 @@ func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 		}
 	}
 
-	torrent, exists := api.torrents[uint(id)]
+	torrent, exists := api.torrents[id]
 	if !exists {
 		errorHandler(w, http.StatusNotFound, "torrent with given ID not found")
 		return
@@ -173,7 +223,7 @@ func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 	}
 
 	// delete torrent from memory
-	delete(api.torrents, uint(id))
+	delete(api.torrents, id)
 
 	// delete torrent from database
 	api.Storage.DB.Delete(torrent)
@@ -215,7 +265,7 @@ func errorHandler(w http.ResponseWriter, status int, message string) {
 }
 
 func (api *HttpApi) LoadFromStorage() error {
-	api.torrents = make(map[uint]*storage.Torrent)
+	api.torrents = make(map[uint64]*storage.Torrent)
 	return nil
 }
 
@@ -223,9 +273,10 @@ func (api *HttpApi) ListenAndServe() error {
 	router := httprouter.New()
 	router.GET("/api/info", getInfoHandler)
 	router.GET("/api/torrent", listTorrentsHandler)
-	router.GET("/api/torrent/:id", getTorrentByIdHandler)
+	router.GET("/api/torrent/:torrent", getTorrentByIdHandler)
+	router.GET("/api/torrent/:torrent/file/:file", getFileByIdHandler)
 	router.POST("/api/torrent", addTorrentHandler)
-	router.DELETE("/api/torrent/:id", deleteTorrentByIdHandler)
+	router.DELETE("/api/torrent/:torrent", deleteTorrentByIdHandler)
 	router.ServeFiles("/frontend/*filepath", AssetFile())
 
 	server := &http.Server{
