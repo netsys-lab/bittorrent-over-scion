@@ -45,8 +45,8 @@ At least the following command line flags are required:
 - `peer`: The full remote SCION address, of format `ISD-AS,[IP]:Port`,
 
 ### Run HTTP API & frontend
-The following command starts up an API that permits running & managing multiple parallel leechers & seeders on http://localhost:8000/api.
-It also serves a frontend at http://localhost:8000/frontend that can be used optionally at your convenience.
+The following command starts up an API that permits running & managing multiple parallel leechers & seeders on `http://localhost:8000/api`.
+It also serves a frontend at `http://0.0.0.0:8000/frontend` that can be used optionally at your convenience.
 ```
 ./bittorrent-over-scion -httpApi -local="19-ffaa:1:111,[127.0.0.1]"
 ```
@@ -54,6 +54,8 @@ It also serves a frontend at http://localhost:8000/frontend that can be used opt
 At least the following command line flags are required:
 - `httpApi`: Start HTTP API instead of leecher or seeder
 - `local`: The full local SCION address, of format `ISD-AS,[IP]` (without port)
+
+Please note that port forwarding of port `8000` might be necessary if you want to use the program from within a SCIONLab VM or similar.
 
 ### Help Info
 Run `bittorrent-over-scion -h` to get a full overview of all command line flags and their explanations.
@@ -68,7 +70,7 @@ We provide a running seeder and a sample torrent file in the [demo](https://gith
 - [ ] Support multi-file torrents
 - [ ] Support multiple torrents by one running instance
 - [ ] Support TCP and SCION connections depending on peer information
-- [ ] Add a GUI on top of the command line client
+- [x] Add a GUI on top of the command line client
 
 ## License
 This project is licensed under the GPLv3 license. However, for accurate information regarding license and copyrights, please check individual files.
