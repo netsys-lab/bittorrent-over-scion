@@ -219,6 +219,41 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: internal server error
+  /api/torrent/{torrent}/file/torrent:
+    get:
+      summary: Get content of torrent file (as originally uploaded)
+      tags:
+        - torrent
+      parameters:
+        - name: torrent
+          in: path
+          description: ID of the torrent the file belongs to
+          required: true
+          schema:
+            type: integer
+            format: uint
+      responses:
+        '200':
+          description: successful
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: invalid torrent ID specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: torrent with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error
 components:
   schemas:
     Error:
@@ -247,6 +282,29 @@ components:
           type: integer
           format: uint
           example: 1337
+    Metrics:
+      type: object
+      properties:
+        rx:
+          type: integer
+          format: uint
+          description: current read bandwidth
+          example: 9000
+        tx:
+          type: integer
+          format: uint
+          description: current written bandwidth
+          example: 1337
+        numConns:
+          type: integer
+          format: uint
+          description: current number of connections
+          example: 7
+        numPaths:
+          type: integer
+          format: uint
+          description: current number of unique used SCION paths
+          example: 1
     Torrent:
       type: object
       properties:
@@ -270,3 +328,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/File'
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        numPieces:
+          type: number
+          format: uint
+          example: 1337
+        numDownloadedPieces:
+          type: number
+          format: uint
+          example: 0
+        pieceLength:
+          type: number
+          format: uint
+          example: 65536

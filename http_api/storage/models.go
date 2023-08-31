@@ -46,6 +46,15 @@ type File struct {
 
 	Path   string `json:"path"`
 	Length uint64 `json:"length"`
+
+	Progress uint64 `gorm:"-" json:"progress"` // in bytes
+}
+
+type Metrics struct {
+	ReadBandwidth    int64 `json:"rx"`
+	WrittenBandwidth int64 `json:"tx"`
+	NumConns         uint  `json:"numConns"`
+	NumPaths         int   `json:"numPaths"`
 }
 
 type Torrent struct {
@@ -65,6 +74,7 @@ type Torrent struct {
 	RawTorrentFile []byte `json:"-"`
 
 	/* only in memory */
+	Metrics     *Metrics                 `gorm:"-" json:"metrics"`
 	TorrentFile *torrentfile.TorrentFile `gorm:"-" json:"-"`
 	P2pTorrent  *p2p.Torrent             `gorm:"-" json:"-"`
 	CancelFunc  *context.CancelFunc      `gorm:"-" json:"-"`
@@ -72,12 +82,24 @@ type Torrent struct {
 
 func (torrent *Torrent) MarshalJSON() ([]byte, error) {
 	type Alias Torrent
+
+	numDownloadedPieces := 0
+	if torrent.P2pTorrent != nil {
+		numDownloadedPieces = torrent.P2pTorrent.NumDownloadedPieces
+	}
+
 	return json.Marshal(&struct {
-		State string `json:"state"`
+		State               string `json:"state"`
+		NumPieces           int    `json:"numPieces"`
+		NumDownloadedPieces int    `json:"numDownloadedPieces"`
+		PieceLength         int    `json:"pieceLength"`
 		*Alias
 	}{
-		State: torrent.State.String(),
-		Alias: (*Alias)(torrent),
+		State:               torrent.State.String(),
+		NumPieces:           len(torrent.TorrentFile.PieceHashes),
+		NumDownloadedPieces: numDownloadedPieces,
+		PieceLength:         torrent.TorrentFile.PieceLength,
+		Alias:               (*Alias)(torrent),
 	})
 }
 

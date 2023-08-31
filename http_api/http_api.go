@@ -161,6 +161,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		RawTorrentFile: fileBuf,
 
 		// only in-memory
+		Metrics:     &storage.Metrics{},
 		TorrentFile: &torrentFile,
 	}
 
