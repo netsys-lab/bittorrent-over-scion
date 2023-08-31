@@ -47,6 +47,7 @@ type Torrent struct {
 	Conns                       []packets.UDPConn
 	DhtNode                     *dht_node.DhtNode
 	DiscoveryConfig             *config.PeerDiscoveryConfig
+	NumDownloadedPieces         int // also useful for e.g. checking progress of a download
 	workQueue                   chan *pieceWork
 	results                     chan *pieceResult
 }
@@ -350,16 +351,16 @@ func (t *Torrent) Download() ([]byte, error) {
 
 	// Collect results into a buffer until full
 	buf := make([]byte, t.Length)
-	donePieces := 0
-	for donePieces < len(t.PieceHashes) {
+	t.NumDownloadedPieces = 0
+	for t.NumDownloadedPieces < len(t.PieceHashes) {
 		res := <-t.results
 		begin, end := t.calculateBoundsForPiece(res.index)
 		copy(buf[begin:end], res.buf)
-		donePieces++
+		t.NumDownloadedPieces++
 
 		// numWorkers := runtime.NumGoroutine() - 1 // subtract 1 for main thread
-		if donePieces%30 == 0 {
-			percent := float64(donePieces) / float64(len(t.PieceHashes)) * 100
+		if t.NumDownloadedPieces%30 == 0 {
+			percent := float64(t.NumDownloadedPieces) / float64(len(t.PieceHashes)) * 100
 			log.Infof("(%0.2f%%) Downloaded piece #%d from %d", percent, res.index, len(t.PieceHashes))
 		}
 
