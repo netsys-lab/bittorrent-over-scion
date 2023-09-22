@@ -1,205 +1,106 @@
-import {Component} from 'react';
+import {useState} from "react";
+import ApiConfig from "./ApiConfig";
 import {
-  CssBaseline,
+  AppBar,
   Box,
-  Grid,
-  Paper,
+  Collapse,
+  CssBaseline,
+  Drawer,
+  IconButton,
   List,
-  ListItem,
-  ListItemText,
   ListItemButton,
   ListItemIcon,
-  Stack,
-  IconButton,
-  Checkbox, Typography
-} from '@mui/material';
-import {OverridableStringUnion} from "@mui/types";
-import DownloadIcon from '@mui/icons-material/Download';
-import CloseIcon from '@mui/icons-material/Close';
-import CircularProgressWithLabel from './CircularProgressWithLabel.tsx';
-import './App.css';
-import ApiConfig from "./ApiConfig.tsx";
-import AddTorrentButton from "./AddTorrentButton.tsx";
-import {SnackbarProvider, closeSnackbar, SnackbarKey} from 'notistack';
-import DeleteTorrentIconButton from "./DeleteTorrentIconButton.tsx";
-import ViewTorrentIconButton from './ViewTorrentIconButton.tsx';
-import { ApiTorrents } from './types.tsx';
-import { filesize } from "filesize";
+  ListItemText,
+  Toolbar,
+  Typography
+} from "@mui/material";
+import {closeSnackbar, SnackbarKey, SnackbarProvider} from "notistack";
+import CloseIcon from "@mui/icons-material/Close";
+import DownloadIcon from "@mui/icons-material/Download";
+import ManageSearchIcon from '@mui/icons-material/ManageSearch';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import GroupsIcon from '@mui/icons-material/Groups';
+import TorrentList from "./TorrentList";
 
-interface AppState {
-  checked: Array<number>
-  torrents: ApiTorrents
-}
-
-class App extends Component<{}, AppState> {
-  //const [count, setCount] = useState(0)
-  public state : AppState = { checked: [], torrents: [] };
-  private timerID = -1;
-  private apiConfig = new ApiConfig();
-  private snackbarCloseAction = (snackbarId: SnackbarKey) => (
+export default function App() {
+  const [currentTabIndex, setCurrentTabIndex] = useState(0);
+  const [settingsListOpen, setSettingsListOpen] = useState(true);
+  const apiConfig = new ApiConfig();
+  const snackbarCloseAction = (snackbarId: SnackbarKey) => (
     <IconButton aria-label="delete" onClick={() => { closeSnackbar(snackbarId) }}>
       <CloseIcon />
     </IconButton>
   );
 
-  componentDidMount() {
-    this.timerID = setInterval(async () => { await this._refreshTorrents() }, 1000);
-  }
-
-  componentWillUnmount() {
-    clearInterval(this.timerID);
-  }
-
-  async _refreshTorrents() {
-    console.log(this.apiConfig.torrentEndpoint());
-    const response = await fetch(this.apiConfig.torrentEndpoint());
-    const torrents = await response.json();
-    //TODO error handling
-
-    console.log(torrents);
-    this.setState({ torrents: torrents });
-  }
-
-  handleToggle(value: number) {
-    const currentIndex = this.state.checked.indexOf(value);
-    const newChecked = [...this.state.checked];
-
-    if (currentIndex === -1) {
-      newChecked.push(value);
-    } else {
-      newChecked.splice(currentIndex, 1);
-    }
-
-    this.setState({checked: newChecked});
-  }
-
-  render() {
-    return (
-      <SnackbarProvider autoHideDuration={3000} action={this.snackbarCloseAction}>
+  return (
+    <SnackbarProvider autoHideDuration={3000} action={snackbarCloseAction}>
+      <Box sx={{ display: 'flex', width: '100vw' }}>
         <CssBaseline />
-        <Box sx={{ width: '60vw' }}>
-          <Grid container spacing={1}>
-            <Grid item xs={12}>
-              <Typography variant="h5">
-                BitTorrent-over-SCION UI
-              </Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <AddTorrentButton apiConfig={this.apiConfig}/>
-            </Grid>
-            <Grid item xs={12}>
-              <Paper elevation={2}>
-                <List>
-                  {Object.keys(this.state.torrents).map((value) => {
-                    const torrentId = parseInt(value);
-                    const torrent = this.state.torrents[torrentId];
-                    let downloadButton = <></>;
-                    let deleteButton = <></>;
-
-                    let finished = false;
-                    let progressValue : number;
-                    let progressColor : OverridableStringUnion<'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' | 'inherit'>;
-                    let status = '';
-                    switch (torrent.state) {
-                      case 'running':
-                        progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
-                        progressColor = 'info';
-                        status = `${torrent.numDownloadedPieces}/${torrent.numPieces} pieces | rx: ${filesize(torrent.metrics.rx, {bits: true})}/s | tx: ${filesize(torrent.metrics.tx, {bits: true})}/s | #conns: ${torrent.metrics.numConns} | #paths: ${torrent.metrics.numPaths}`
-
-                        break;
-                      case 'completed':
-                        progressValue = 100;
-                        progressColor = 'success';
-                        status = `${torrent.numDownloadedPieces}/${torrent.numPieces} pieces | ${torrent.files.length}/${torrent.files.length} files`
-
-                        const fileId = torrent.files[0].id;
-                        downloadButton = (
-                          <IconButton
-                            edge="end"
-                            onClick={
-                              (_) => window.open(
-                                this.apiConfig.fileEndpoint(torrentId, fileId)
-                              )
-                            }
-                          >
-                            <DownloadIcon />
-                          </IconButton>
-                        );
-
-                        finished = true;
-                        break;
-                      case 'failed':
-                      case 'cancelled':
-                        progressColor = 'error';
-                        progressValue = 100;
-                        finished = true;
-                        break;
-                      default:
-                        progressValue = 0;
-                        progressColor = 'primary';
-                        break;
-                    }
-
-                    if (finished || torrent.state == 'not started yet') {
-                      deleteButton = <DeleteTorrentIconButton apiConfig={this.apiConfig} torrentId={torrentId} />;
-                    }
-
-                    return (
-                      <ListItem
-                        key={value}
-                        secondaryAction={
-                          <Stack direction="row" spacing={1}>
-                            {/*<FormControlLabel
-                              value="start"
-                              control={<Switch color="primary" />}
-                              label="Seed"
-                              labelPlacement="start"
-                            />
-                            <Divider orientation="vertical" variant="middle" flexItem />*/}
-                            <ViewTorrentIconButton apiConfig={this.apiConfig} torrent={torrent} />
-                            {downloadButton}
-                            {deleteButton}
-                          </Stack>
-                        }
-                        disablePadding
-                      >
-                        <ListItemButton onClick={() => this.handleToggle(torrentId)} dense>
-                          <ListItemIcon>
-                            <Checkbox
-                              edge="start"
-                              checked={this.state.checked.indexOf(torrentId) !== -1}
-                              tabIndex={-1}
-                              disableRipple
-                            />
-                          </ListItemIcon>
-                          {/*<ListItemAvatar>
-                            <Avatar>{123}</Avatar>
-                          </ListItemAvatar>*/}
-                          <Stack direction="row" alignItems="center" spacing={1}>
-                            <CircularProgressWithLabel value={progressValue} color={progressColor} />
-                            <ListItemText
-                              primary={torrent.name}
-                              secondary={status != '' ? status : false}
-                            />
-                          </Stack>
-
-                        </ListItemButton>
-                      </ListItem>
-                    );
-                  })}
-                  {Object.keys(this.state.torrents).length == 0 &&
-                    <ListItem>
-                      No torrents yet. Add one with the buttons above!
-                    </ListItem>
-                  }
+        <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+          <Toolbar>
+            <Typography variant="h6" noWrap component="div">
+              BitTorrent-over-SCION User Interface
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: '20vw',
+            flexShrink: 0,
+            [`& .MuiDrawer-paper`]: { width: '20vw', boxSizing: 'border-box' },
+          }}
+        >
+          <Toolbar />
+          <Box sx={{ overflow: 'auto' }}>
+            <List>
+              <ListItemButton selected={currentTabIndex === 0} onClick={() => setCurrentTabIndex(0)}>
+                <ListItemIcon>
+                  <DownloadIcon />
+                </ListItemIcon>
+                <ListItemText primary="Torrents" />
+              </ListItemButton>
+              <ListItemButton selected={currentTabIndex === 1} onClick={() => setCurrentTabIndex(1)}>
+                <ListItemIcon>
+                  <ManageSearchIcon />
+                </ListItemIcon>
+                <ListItemText primary="Trackers" />
+              </ListItemButton>
+              <ListItemButton onClick={() => setSettingsListOpen(!settingsListOpen)}>
+                <ListItemIcon>
+                  <SettingsIcon />
+                </ListItemIcon>
+                <ListItemText primary="Settings" />
+                {settingsListOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </ListItemButton>
+              <Collapse in={settingsListOpen} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding>
+                  <ListItemButton sx={{ pl: 4 }} selected={currentTabIndex === 2} onClick={() => setCurrentTabIndex(2)}>
+                    <ListItemIcon>
+                      <GroupsIcon />
+                    </ListItemIcon>
+                    <ListItemText primary="DHT" />
+                  </ListItemButton>
                 </List>
-              </Paper>
-            </Grid>
-          </Grid>
+              </Collapse>
+            </List>
+          </Box>
+        </Drawer>
+        <Box component="main" sx={{ flexGrow: 1, p: '1vw' }}>
+          <Toolbar />
+          {currentTabIndex === 0 &&
+            <TorrentList apiConfig={apiConfig}/>
+          }
+          {currentTabIndex === 1 &&
+            <>TODO</>
+          }
+          {currentTabIndex === 2 &&
+            <>TODO</>
+          }
         </Box>
-      </SnackbarProvider>
-    );
-  }
+      </Box>
+    </SnackbarProvider>
+  );
 }
-
-export default App;
