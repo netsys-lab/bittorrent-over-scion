@@ -50,7 +50,12 @@ type File struct {
 	Progress uint64 `gorm:"-" json:"progress"` // in bytes
 }
 
-type Metrics struct {
+type Tracker struct {
+	ID  uint64 `gorm:"primaryKey" json:"id"`
+	URL string `gorm:"uniqueIndex" json:"url"`
+}
+
+type TorrentMetrics struct {
 	ReadBandwidth    int64 `json:"rx"`
 	WrittenBandwidth int64 `json:"tx"`
 	NumConns         uint  `json:"numConns"`
@@ -74,7 +79,7 @@ type Torrent struct {
 	RawTorrentFile []byte `json:"-"`
 
 	/* only in memory */
-	Metrics     *Metrics                 `gorm:"-" json:"metrics"`
+	Metrics     *TorrentMetrics          `gorm:"-" json:"metrics"`
 	TorrentFile *torrentfile.TorrentFile `gorm:"-" json:"-"`
 	P2pTorrent  *p2p.Torrent             `gorm:"-" json:"-"`
 	CancelFunc  *context.CancelFunc      `gorm:"-" json:"-"`

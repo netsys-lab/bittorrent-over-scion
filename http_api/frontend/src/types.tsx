@@ -7,7 +7,7 @@ export interface ApiFile {
   progress: number;
 }
 
-export interface ApiMetrics {
+export interface ApiTorrentMetrics {
   rx: number;
   tx: number;
   numConns: number;
@@ -21,7 +21,7 @@ export interface ApiTorrent {
   status: string;
   peer: string;
   files: Array<ApiFile>;
-  metrics: ApiMetrics;
+  metrics: ApiTorrentMetrics;
   numPieces: number;
   numDownloadedPieces: number;
   pieceLength: number;
@@ -29,4 +29,13 @@ export interface ApiTorrent {
 
 export interface ApiTorrents {
   [key: number]: ApiTorrent;
+}
+
+export interface ApiTracker {
+  id: number;
+  url: string;
+}
+
+export interface ApiTrackers {
+  [key: number]: ApiTracker;
 }

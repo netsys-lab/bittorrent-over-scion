@@ -26,6 +26,7 @@ type HttpApi struct {
 	Storage   *storage.Storage
 	LocalHost string
 	torrents  map[uint64]*storage.Torrent
+	trackers  map[uint64]*storage.Tracker
 }
 
 type ErrorResponseBody struct {
@@ -43,6 +44,11 @@ func getInfoHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params)
 func listTorrentsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
 	defaultHandler(w, api.torrents)
+}
+
+func listTrackersHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+	defaultHandler(w, api.trackers)
 }
 
 func getTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -106,6 +112,22 @@ func getFileByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Par
 	errorHandler(w, http.StatusNotFound, "file with given ID not found")
 }
 
+func getTrackerByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+	id, err := strconv.ParseUint(p.ByName("tracker"), 10, 0)
+	if err != nil {
+		errorHandler(w, http.StatusBadRequest, "invalid ID specified")
+		return
+	}
+
+	tracker, exists := api.trackers[id]
+	if !exists {
+		errorHandler(w, http.StatusNotFound, "tracker with given ID not found")
+		return
+	}
+	defaultHandler(w, tracker)
+}
+
 func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
 
@@ -144,6 +166,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		return
 	}
 	log.Debugf("TorrentFile{Announce: \"%s\", Length: %d, Name: \"%s\", PieceLength: %d}", torrentFile.Announce, torrentFile.Length, torrentFile.Name, torrentFile.PieceLength)
+	//TODO add tracker to trackers once it is actually parsed from torrent file
 
 	// construct Torrent object
 	torrent := &storage.Torrent{
@@ -161,7 +184,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		RawTorrentFile: fileBuf,
 
 		// only in-memory
-		Metrics:     &storage.Metrics{},
+		Metrics:     &storage.TorrentMetrics{},
 		TorrentFile: &torrentFile,
 	}
 
@@ -183,6 +206,42 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 
 	w.WriteHeader(http.StatusCreated)
 	defaultHandler(w, torrent)
+}
+
+func addTrackerHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+
+	url := r.FormValue("url")
+	if len(url) == 0 {
+		errorHandler(w, http.StatusBadRequest, "field \"url\" as part of POST form data is missing")
+		return
+	}
+
+	// construct Tracker object
+	tracker := &storage.Tracker{
+		// persisted in database
+		URL: url,
+
+		// only in-memory
+		// ...
+	}
+
+	// put it in database
+	result := api.Storage.DB.FirstOrCreate(tracker)
+	if result.Error != nil {
+		errorHandler(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	if result.RowsAffected == 0 {
+		errorHandler(w, http.StatusConflict, "tracker with given URL already exists")
+		return
+	}
+
+	// also put it in memory
+	api.trackers[tracker.ID] = tracker
+
+	w.WriteHeader(http.StatusCreated)
+	defaultHandler(w, tracker)
 }
 
 func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -232,6 +291,29 @@ func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 	defaultHandler(w, nil)
 }
 
+func deleteTrackerByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+	id, err := strconv.ParseUint(p.ByName("tracker"), 10, 0)
+	if err != nil {
+		errorHandler(w, http.StatusBadRequest, "invalid ID specified")
+		return
+	}
+
+	tracker, exists := api.trackers[id]
+	if !exists {
+		errorHandler(w, http.StatusNotFound, "tracker with given ID not found")
+		return
+	}
+
+	// delete torrent from memory
+	delete(api.trackers, id)
+
+	// delete torrent from database
+	api.Storage.DB.Delete(tracker)
+
+	defaultHandler(w, nil)
+}
+
 func defaultHandler(w http.ResponseWriter, payload interface{}) {
 	str, err := json.Marshal(&payload)
 	if err != nil {
@@ -267,6 +349,7 @@ func errorHandler(w http.ResponseWriter, status int, message string) {
 
 func (api *HttpApi) LoadFromStorage() error {
 	api.torrents = make(map[uint64]*storage.Torrent)
+	api.trackers = make(map[uint64]*storage.Tracker)
 	return nil
 }
 
@@ -276,8 +359,12 @@ func (api *HttpApi) ListenAndServe() error {
 	router.GET("/api/torrent", listTorrentsHandler)
 	router.GET("/api/torrent/:torrent", getTorrentByIdHandler)
 	router.GET("/api/torrent/:torrent/file/:file", getFileByIdHandler)
+	router.GET("/api/tracker", listTrackersHandler)
+	router.GET("/api/tracker/:tracker", getTrackerByIdHandler)
 	router.POST("/api/torrent", addTorrentHandler)
+	router.POST("/api/tracker", addTrackerHandler)
 	router.DELETE("/api/torrent/:torrent", deleteTorrentByIdHandler)
+	router.DELETE("/api/tracker/:tracker", deleteTrackerByIdHandler)
 	router.ServeFiles("/frontend/*filepath", AssetFile())
 
 	server := &http.Server{

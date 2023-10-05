@@ -23,6 +23,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import GroupsIcon from '@mui/icons-material/Groups';
 import TorrentList from "./TorrentList";
+import TrackerList from "./TrackerList.tsx";
 
 export default function App() {
   const [currentTabIndex, setCurrentTabIndex] = useState(0);
@@ -91,10 +92,10 @@ export default function App() {
         <Box component="main" sx={{ flexGrow: 1, p: '1vw' }}>
           <Toolbar />
           {currentTabIndex === 0 &&
-            <TorrentList apiConfig={apiConfig}/>
+            <TorrentList apiConfig={apiConfig} />
           }
           {currentTabIndex === 1 &&
-            <>TODO</>
+            <TrackerList apiConfig={apiConfig} />
           }
           {currentTabIndex === 2 &&
             <>TODO</>

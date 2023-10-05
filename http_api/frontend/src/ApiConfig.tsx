@@ -14,4 +14,11 @@ export default class ApiConfig {
         }
         return str;
     }
+    public trackerEndpoint = (trackerId?: number) => {
+        let str = this.apiEndpoint() + "/tracker";
+        if (typeof(trackerId) !== 'undefined') {
+            str += "/" + trackerId;
+        }
+        return str;
+    }
 }
