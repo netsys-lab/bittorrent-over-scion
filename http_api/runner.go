@@ -6,8 +6,11 @@ import (
 	"errors"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
+	"github.com/netsys-lab/bittorrent-over-scion/server"
+	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/scionproto/scion/go/lib/snet"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -62,7 +65,13 @@ func runMetricsCollector(torrent *storage.Torrent, stop chan bool) {
 	}
 }
 
-func (api *HttpApi) RunTorrent(ctx context.Context, torrent *storage.Torrent) {
+func resetSeeder(torrent *storage.Torrent) {
+	torrent.SeedOnCompletion = false
+	torrent.CancelFunc = nil
+	torrent.SeedAddr = ""
+}
+
+func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 	// this is just a simple test for cancellation, a code snippet to be used later
 	if errors.Is(ctx.Err(), context.Canceled) {
 		torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "cancelled by user")
@@ -89,6 +98,7 @@ func (api *HttpApi) RunTorrent(ctx context.Context, torrent *storage.Torrent) {
 
 	// configure peer discovery
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
+	peerDiscoveryConfig.EnableDht = api.EnableDht
 
 	// generate random peer ID
 	var peerID [20]byte
@@ -184,4 +194,118 @@ func (api *HttpApi) RunTorrent(ctx context.Context, torrent *storage.Torrent) {
 	torrent.Files[0].Progress = torrent.Files[0].Length
 
 	torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "")
+
+	// start seeding if told to do so
+	if torrent.SeedOnCompletion {
+		api.RunSeeder(ctx, torrent)
+	}
+}
+
+func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
+	// this is just a simple test for cancellation, a code snippet to be used later
+	if errors.Is(ctx.Err(), context.Canceled) {
+		torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "cancelled by user")
+		return
+	}
+
+	outPath := torrent.GetFileDir(api.Storage.FS)
+	if len(torrent.Files[0].Path) == 0 {
+		outPath = filepath.Join(outPath, "file")
+	} else {
+		outPath = filepath.Join(outPath, torrent.Files[0].Path)
+	}
+
+	// load file into RAM
+	var err error
+	torrent.TorrentFile.Content, err = ioutil.ReadFile(outPath)
+	if err != nil {
+		// turn off seeding so that the user can try again to reactivate it
+		resetSeeder(torrent)
+
+		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+		return
+	}
+
+	// configure peer discovery
+	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
+	peerDiscoveryConfig.EnableDht = api.EnableDht
+	dhtAddr, err := snet.ParseUDPAddr(api.DhtBootstrapAddr)
+	if err == nil {
+		peerDiscoveryConfig.DhtNodes = []dht.Addr{dht.NewAddr(*dhtAddr)}
+	}
+	if api.DhtPort > 0 {
+		peerDiscoveryConfig.DhtPort = uint16(api.DhtPort)
+	}
+
+	// take next automatic port if needed
+	seedPort := torrent.SeedPort
+	if seedPort == 0 {
+		seedPort = api.SeedStartPort
+		for {
+			_, exists := api.usedUdpPorts[seedPort]
+			if !exists || api.usedUdpPorts[seedPort] == false {
+				break
+			}
+
+			seedPort += 1
+		}
+		api.usedUdpPorts[seedPort] = true
+		defer func() {
+			// the underlying implementation of the Listen/ListenHandshake functions do not consider closing any connections...
+			// therefore currently, due to the SCION dispatcher not allowing to register the same port multiple times, a new port must be used
+			//TODO close SCION connection somewhere so that the port is reusable in the same process
+			//api.usedUdpPorts[seedPort] = false
+		}()
+	}
+
+	// set port
+	localAddr, err := snet.ParseUDPAddr(api.LocalHost)
+	if err != nil {
+		// turn of seeding so that the user can try again to reactivate it
+		resetSeeder(torrent)
+
+		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+		return
+	}
+	localAddr.Host.Port = int(seedPort)
+	torrent.SeedAddr = localAddr.String()
+
+	// dial back port selection is a bit weird on the server implementation, we just use the DialBackStartPort
+	// configured by CLI plus the offset of the selected seeding port from the seed start port for now
+	dialBackStartPort := api.DialBackStartPort + (seedPort - api.SeedStartPort)
+
+	// peer := fmt.Sprintf("%s:%d", flags.Peer, port)
+	conf := server.ServerConfig{
+		LAddr:                       torrent.SeedAddr,
+		TorrentFile:                 torrent.TorrentFile,
+		PathSelectionResponsibility: "server",
+		NumPaths:                    api.NumPaths,
+		DialBackPort:                int(dialBackStartPort),
+		DiscoveryConfig:             &peerDiscoveryConfig,
+		ExportMetricsTarget:         "",
+	}
+	server_, err := server.NewServer(&conf)
+	if err != nil {
+		// turn of seeding so that the user can try again to reactivate it
+		resetSeeder(torrent)
+
+		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+		return
+	}
+
+	torrent.SaveState(api.Storage.DB, storage.StateSeeding, "")
+
+	err = server_.ListenHandshake(ctx)
+	if err != nil {
+		// turn of seeding so that the user can try again to reactivate it
+		resetSeeder(torrent)
+
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "")
+		} else {
+			torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+		}
+		return
+	}
+
 }

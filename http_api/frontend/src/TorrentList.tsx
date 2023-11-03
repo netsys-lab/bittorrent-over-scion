@@ -2,7 +2,10 @@ import ApiConfig from "./ApiConfig.tsx";
 import {Component} from "react";
 import {ApiTorrents} from "./types.tsx";
 import {
-  Checkbox, CircularProgress, Grid,
+  Checkbox,
+  CircularProgress,
+  Divider,
+  Grid,
   IconButton,
   List,
   ListItem,
@@ -19,6 +22,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import DeleteTorrentIconButton from "./DeleteTorrentIconButton.tsx";
 import ViewTorrentIconButton from "./ViewTorrentIconButton.tsx";
 import CircularProgressWithLabel from "./CircularProgressWithLabel.tsx";
+import SeedSwitch from "./SeedSwitch.tsx";
 
 interface TorrentListProps {
   apiConfig: ApiConfig,
@@ -79,30 +83,33 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                 const torrent = this.state.torrents[torrentId];
                 let downloadButton = <></>;
                 let deleteButton = <></>;
+                let progress = <></>;
 
                 let finished = false;
-                let progressValue : number;
-                let progressColor : OverridableStringUnion<'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' | 'inherit'>;
+                let progressValue = 0;
+                let progressColor : OverridableStringUnion<'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' | 'inherit'> = 'primary';
                 let status = '';
                 switch (torrent.state) {
                   case 'running':
                     progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
                     progressColor = 'info';
                     status = `${torrent.numDownloadedPieces}/${torrent.numPieces} pieces | rx: ${filesize(torrent.metrics.rx, {bits: true})}/s | tx: ${filesize(torrent.metrics.tx, {bits: true})}/s | #conns: ${torrent.metrics.numConns} | #paths: ${torrent.metrics.numPaths}`
-
                     break;
                   case 'completed':
                     progressValue = 100;
                     progressColor = 'success';
-                    status = `${torrent.numDownloadedPieces}/${torrent.numPieces} pieces | ${torrent.files.length}/${torrent.files.length} files`
+                    if (torrent.status) {
+                      status = torrent.status;
+                    } else {
+                      status = `${torrent.numDownloadedPieces}/${torrent.numPieces} pieces | ${torrent.files.length}/${torrent.files.length} files`
+                    }
 
-                    const fileId = torrent.files[0].id;
                     downloadButton = (
                       <IconButton
                         edge="end"
                         onClick={
                           (_) => window.open(
-                            this.props.apiConfig.fileEndpoint(torrentId, fileId)
+                            this.props.apiConfig.fileEndpoint(torrentId, torrent.files[0].id)
                           )
                         }
                       >
@@ -113,15 +120,40 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                     finished = true;
                     break;
                   case 'failed':
-                  case 'cancelled':
+                    progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
                     progressColor = 'error';
-                    progressValue = 100;
+                    status = 'dowloading torrent failed'; //TODO add error info
                     finished = true;
                     break;
-                  default:
-                    progressValue = 0;
-                    progressColor = 'primary';
+                  case 'cancelled':
+                    progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
+                    progressColor = 'error';
+                    status = 'cancelled by user';
+                    finished = true;
                     break;
+                  case 'seeding':
+                    progress = <CircularProgressWithLabel label="SEED" />;
+                    status = 'seeding at ' + torrent.seedAddr.toString();
+
+                    downloadButton = (
+                      <IconButton
+                        edge="end"
+                        onClick={
+                          (_) => window.open(
+                            this.props.apiConfig.fileEndpoint(torrentId, torrent.files[0].id)
+                          )
+                        }
+                      >
+                        <DownloadIcon />
+                      </IconButton>
+                    );
+
+                    finished = true;
+                    break;
+                }
+
+                if (torrent.state != 'seeding') {
+                  progress = <CircularProgressWithLabel variant="determinate" label={`${Math.round(progressValue)}%`} value={progressValue} color={progressColor} />;
                 }
 
                 if (finished || torrent.state == 'not started yet') {
@@ -133,13 +165,8 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                     key={value}
                     secondaryAction={
                       <Stack direction="row" spacing={1}>
-                        {/*<FormControlLabel
-                              value="start"
-                              control={<Switch color="primary" />}
-                              label="Seed"
-                              labelPlacement="start"
-                            />
-                            <Divider orientation="vertical" variant="middle" flexItem />*/}
+                        <SeedSwitch apiConfig={this.props.apiConfig} torrentId={torrentId} seedOnCompletion={torrent.seedOnCompletion} />
+                        <Divider orientation="vertical" variant="middle" flexItem />
                         <ViewTorrentIconButton apiConfig={this.props.apiConfig} torrent={torrent} />
                         {downloadButton}
                         {deleteButton}
@@ -160,7 +187,7 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                             <Avatar>{123}</Avatar>
                           </ListItemAvatar>*/}
                       <Stack direction="row" alignItems="center" spacing={1}>
-                        <CircularProgressWithLabel value={progressValue} color={progressColor} />
+                        {progress}
                         <ListItemText
                           primary={torrent.name}
                           secondary={status != '' ? status : false}

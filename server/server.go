@@ -5,6 +5,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -285,7 +286,7 @@ func (s *Server) measureConnMetrics(conn packets.UDPConn, sessionId string, wg *
 
 }
 
-func (s *Server) ListenHandshake() error {
+func (s *Server) ListenHandshake(ctx context.Context) error {
 	var err error
 
 	mpListener := smp.NewMPListener(s.lAddr, &smp.MPListenerOptions{
@@ -299,7 +300,7 @@ func (s *Server) ListenHandshake() error {
 	startPort := s.DialBackStartPort
 	for {
 		log.Info("waiting for MPPeer socket connect")
-		remote, err := mpListener.WaitForMPPeerSockConnect()
+		remote, err := mpListener.WaitForMPPeerSockConnectWithContext(ctx)
 		if err != nil {
 			return err
 		}

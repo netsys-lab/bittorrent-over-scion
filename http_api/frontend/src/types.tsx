@@ -17,9 +17,12 @@ export interface ApiTorrentMetrics {
 export interface ApiTorrent {
   id: number;
   name: string;
-  state: OverridableStringUnion<'not started yet' | 'running' | 'completed' | 'failed' | 'cancelled'>;
+  state: OverridableStringUnion<'not started yet' | 'running' | 'completed' | 'failed' | 'cancelled' | 'seeding'>;
   status: string;
   peer: string;
+  seedOnCompletion: boolean;
+  seedPort: number;
+  seedAddr: string;
   files: Array<ApiFile>;
   metrics: ApiTorrentMetrics;
   numPieces: number;

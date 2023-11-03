@@ -125,7 +125,7 @@ export default function ViewTorrentIconButton({apiConfig, torrent} : ViewTorrent
                         disablePadding
                       >
                         <Stack direction="row" alignItems="center" spacing={1}>
-                          <CircularProgressWithLabel value={progress} color="primary" />
+                          <CircularProgressWithLabel variant="determinate" label={`${Math.round(progress)}%`} value={progress} color="primary" />
                           <ListItemText primary={file.path} secondary={`${file.progress}/${file.length} bytes`} />
                         </Stack>
                       </ListItem>

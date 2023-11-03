@@ -21,12 +21,20 @@ import (
 )
 
 type HttpApi struct {
-	Port      int
-	EnableDht bool
-	Storage   *storage.Storage
-	LocalHost string
-	torrents  map[uint64]*storage.Torrent
-	trackers  map[uint64]*storage.Tracker
+	Port              int
+	LocalHost         string
+	NumPaths          int
+	DialBackStartPort uint16
+	SeedStartPort     uint16
+	EnableDht         bool
+	DhtPort           uint16
+	DhtBootstrapAddr  string
+
+	Storage *storage.Storage
+
+	torrents     map[uint64]*storage.Torrent
+	trackers     map[uint64]*storage.Tracker
+	usedUdpPorts map[uint16]bool
 }
 
 type ErrorResponseBody struct {
@@ -145,6 +153,27 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		return
 	}
 
+	var err error
+	seedOnCompletionStr := r.FormValue("seedOnCompletion")
+	seedOnCompletionBool := false
+	if len(peer) > 0 {
+		seedOnCompletionBool, err = strconv.ParseBool(seedOnCompletionStr)
+		if err != nil {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"seedOnCompletion\" specified (boolean wanted)")
+			return
+		}
+	}
+
+	seedPortStr := r.FormValue("seedPort")
+	var seedPortNum uint64
+	if len(seedPortStr) > 0 {
+		seedPortNum, err = strconv.ParseUint(seedPortStr, 10, 16)
+		if err != nil || seedPortNum > 65535 {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"seedPort\" specified (0-65535 wanted)")
+			return
+		}
+	}
+
 	file, fileHdr, err := r.FormFile("torrentFile")
 	if err != nil {
 		errorHandler(w, http.StatusBadRequest, "file field \"torrentFile\" as part of POST form data is missing")
@@ -171,9 +200,11 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	// construct Torrent object
 	torrent := &storage.Torrent{
 		// persisted in database
-		FriendlyName: fileHdr.Filename,
-		State:        storage.StateNotStartedYet,
-		Peer:         peer,
+		FriendlyName:     fileHdr.Filename,
+		State:            storage.StateNotStartedYet,
+		Peer:             peer,
+		SeedOnCompletion: seedOnCompletionBool,
+		SeedPort:         uint16(seedPortNum),
 		//TODO multiple files per torrent
 		Files: []storage.File{
 			{
@@ -200,7 +231,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 
 	// start torrent
 	ctx, cancel := context.WithCancel(context.Background())
-	go api.RunTorrent(ctx, torrent)
+	go api.RunLeecher(ctx, torrent)
 	torrent.CancelFunc = &cancel
 	//TODO make cancellation actually possible
 
@@ -244,6 +275,58 @@ func addTrackerHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	defaultHandler(w, tracker)
 }
 
+func updateTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+
+	torrentId, err := strconv.ParseUint(p.ByName("torrent"), 10, 0)
+	if err != nil {
+		errorHandler(w, http.StatusBadRequest, "invalid ID specified")
+		return
+	}
+
+	torrent, exists := api.torrents[torrentId]
+	if !exists {
+		errorHandler(w, http.StatusNotFound, "torrent with given ID not found")
+		return
+	}
+
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		errorHandler(w, http.StatusUnsupportedMediaType, "invalid content type (\"multipart/form-data\" wanted)")
+		return
+	}
+
+	seedOnCompletionStr := r.FormValue("seedOnCompletion")
+	if len(seedOnCompletionStr) > 0 {
+		seedOnCompletionBool, err := strconv.ParseBool(seedOnCompletionStr)
+		if err != nil {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"seedOnCompletion\" (must be 0 or 1)")
+			return
+		}
+
+		// start or stop seeder if not yet done
+		if seedOnCompletionBool && !torrent.SeedOnCompletion && torrent.State == storage.StateFinishedSuccessfully {
+			ctx, cancel := context.WithCancel(context.Background())
+			go api.RunSeeder(ctx, torrent)
+			torrent.CancelFunc = &cancel
+		} else if !seedOnCompletionBool && torrent.State == storage.StateSeeding && torrent.CancelFunc != nil {
+			(*torrent.CancelFunc)()
+		}
+
+		torrent.SeedOnCompletion = seedOnCompletionBool
+	}
+
+	// save changes to database
+	result := api.Storage.DB.Save(torrent)
+	if result.Error != nil {
+		errorHandler(w, http.StatusInternalServerError, "database error")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	defaultHandler(w, torrent)
+
+}
+
 func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
 	id, err := strconv.ParseUint(p.ByName("torrent"), 10, 0)
@@ -258,6 +341,7 @@ func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 		deleteFromFs, err = strconv.ParseBool(param)
 		if err != nil {
 			errorHandler(w, http.StatusBadRequest, "invalid value for field \"deleteFiles\" (must be 0 or 1)")
+			return
 		}
 	}
 
@@ -270,6 +354,11 @@ func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 	if !torrent.State.IsFinished() {
 		errorHandler(w, http.StatusConflict, "torrent is running, stop it before deletion")
 		return
+	}
+
+	// stop seeder if not yet done
+	if torrent.State == storage.StateSeeding && torrent.CancelFunc != nil {
+		(*torrent.CancelFunc)()
 	}
 
 	// delete files associated to the torrent
@@ -354,6 +443,8 @@ func (api *HttpApi) LoadFromStorage() error {
 }
 
 func (api *HttpApi) ListenAndServe() error {
+	api.usedUdpPorts = make(map[uint16]bool)
+
 	router := httprouter.New()
 	router.GET("/api/info", getInfoHandler)
 	router.GET("/api/torrent", listTorrentsHandler)
@@ -362,6 +453,7 @@ func (api *HttpApi) ListenAndServe() error {
 	router.GET("/api/tracker", listTrackersHandler)
 	router.GET("/api/tracker/:tracker", getTrackerByIdHandler)
 	router.POST("/api/torrent", addTorrentHandler)
+	router.POST("/api/torrent/:torrent", updateTorrentByIdHandler)
 	router.POST("/api/tracker", addTrackerHandler)
 	router.DELETE("/api/torrent/:torrent", deleteTorrentByIdHandler)
 	router.DELETE("/api/tracker/:tracker", deleteTrackerByIdHandler)

@@ -4,18 +4,17 @@ package main
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
-	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
-	"io/ioutil"
-
+	"context"
 	"github.com/anacrolix/tagflag"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/http_api"
+	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
+	"github.com/netsys-lab/bittorrent-over-scion/server"
+	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	"github.com/netsys-lab/dht"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/netsys-lab/bittorrent-over-scion/config"
-	"github.com/netsys-lab/bittorrent-over-scion/http_api"
-	"github.com/netsys-lab/bittorrent-over-scion/server"
-	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
+	"io/ioutil"
 )
 
 var flags = struct {
@@ -27,6 +26,7 @@ var flags = struct {
 	Local             string `help:"Local SCION address of the seeder"`
 	HttpApi           bool   `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
 	HttpApiPort       int    `help:"Optional: Configure the port the HTTP API will listen on. Only for httpApi=true"`
+	SeedStartPort     int    `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
 	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
 	DialBackStartPort int    `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
 	LogLevel          string `help:"Optional: Change log level"`
@@ -39,6 +39,7 @@ var flags = struct {
 	Seed:              false,
 	HttpApi:           false,
 	HttpApiPort:       8000,
+	SeedStartPort:     44000,
 	NumPaths:          0,
 	DialBackStartPort: 45000,
 	LogLevel:          "INFO",
@@ -87,10 +88,15 @@ func main() {
 
 		log.Info("[HTTP API] Loading existing torrent tasks from storage...")
 		api := http_api.HttpApi{
-			Port:      flags.HttpApiPort,
-			EnableDht: flags.EnableDht,
-			Storage:   storage_,
-			LocalHost: flags.Local,
+			Port:              flags.HttpApiPort,
+			EnableDht:         flags.EnableDht, //TODO make this configurable per torrent?
+			DhtPort:           uint16(flags.DhtPort),
+			DhtBootstrapAddr:  flags.DhtBootstrapAddr,
+			LocalHost:         flags.Local,
+			NumPaths:          flags.NumPaths,
+			DialBackStartPort: uint16(flags.DialBackStartPort),
+			SeedStartPort:     uint16(flags.SeedStartPort),
+			Storage:           storage_,
 		}
 		err = api.LoadFromStorage()
 		if err != nil {
@@ -143,14 +149,14 @@ func main() {
 			DiscoveryConfig:             &peerDiscoveryConfig,
 			ExportMetricsTarget:         flags.ExportMetricsTo,
 		}
-		server, err := server.NewServer(&conf)
+		server_, err := server.NewServer(&conf)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		log.Info("Created Server")
 
-		err = server.ListenHandshake()
+		err = server_.ListenHandshake(context.Background())
 		if err != nil {
 			log.Fatal(err)
 		}

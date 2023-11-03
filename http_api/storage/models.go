@@ -21,12 +21,13 @@ func (state State) String() string {
 		"failed",
 		"completed",
 		"cancelled",
+		"seeding",
 	}[state]
 }
 
 func (state State) IsFinished() bool {
 	switch state {
-	case StateFinishedFailed, StateFinishedSuccessfully, StateFinishedCancelled:
+	case StateFinishedFailed, StateFinishedSuccessfully, StateFinishedCancelled, StateSeeding:
 		return true
 	}
 	return false
@@ -38,6 +39,7 @@ const (
 	StateFinishedFailed             = 2
 	StateFinishedSuccessfully       = 3
 	StateFinishedCancelled          = 4
+	StateSeeding                    = 5
 )
 
 type File struct {
@@ -71,18 +73,21 @@ type Torrent struct {
 	UpdatedAt time.Time `json:"-"`
 
 	// own attributes
-	FriendlyName   string `json:"name"`
-	Peer           string `json:"peer"`
-	State          State  `json:"-"`
-	Status         string `json:"status"`
-	Files          []File `json:"files"`
-	RawTorrentFile []byte `json:"-"`
+	FriendlyName     string `json:"name"`
+	Peer             string `json:"peer"`
+	SeedOnCompletion bool   `json:"seedOnCompletion"`
+	SeedPort         uint16 `json:"seedPort"`
+	State            State  `json:"-"`
+	Status           string `json:"status"`
+	Files            []File `json:"files"`
+	RawTorrentFile   []byte `json:"-"`
 
 	/* only in memory */
 	Metrics     *TorrentMetrics          `gorm:"-" json:"metrics"`
 	TorrentFile *torrentfile.TorrentFile `gorm:"-" json:"-"`
 	P2pTorrent  *p2p.Torrent             `gorm:"-" json:"-"`
 	CancelFunc  *context.CancelFunc      `gorm:"-" json:"-"`
+	SeedAddr    string                   `gorm:"-" json:"seedAddr"`
 }
 
 func (torrent *Torrent) MarshalJSON() ([]byte, error) {
