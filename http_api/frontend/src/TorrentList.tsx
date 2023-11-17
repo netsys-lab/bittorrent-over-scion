@@ -122,18 +122,18 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                   case 'failed':
                     progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
                     progressColor = 'error';
-                    status = 'dowloading torrent failed'; //TODO add error info
+                    status = 'Dowloading torrent failed: ' + torrent.status;
                     finished = true;
                     break;
                   case 'cancelled':
                     progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
                     progressColor = 'error';
-                    status = 'cancelled by user';
+                    status = 'Cancelled by user';
                     finished = true;
                     break;
                   case 'seeding':
                     progress = <CircularProgressWithLabel label="SEED" />;
-                    status = 'seeding at ' + torrent.seedAddr.toString();
+                    status = 'Seeding at ' + torrent.seedAddr.toString();
 
                     downloadButton = (
                       <IconButton

@@ -6,6 +6,7 @@ package p2p
 import (
 	"bytes"
 	"crypto/sha1"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -50,6 +51,7 @@ type Torrent struct {
 	NumDownloadedPieces         int // also useful for e.g. checking progress of a download
 	workQueue                   chan *pieceWork
 	results                     chan *pieceResult
+	err                         chan error
 }
 
 var peerMember interface{}
@@ -185,7 +187,9 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash, t.DiscoveryConfig, t.DhtNode)
 		if err != nil {
 			log.Error(err)
-			log.Errorf("Could not handshake with %s. Disconnecting", peer)
+			str := fmt.Sprintf("Could not handshake with %s. Disconnecting!", peer)
+			log.Error(str)
+			t.err <- errors.New(str)
 			return
 		}
 
@@ -258,7 +262,9 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 			}
 		}()
 	} else {
-		log.Error("Client based pathselection not supported")
+		str := "Client based pathselection not supported"
+		log.Error(str)
+		t.err <- errors.New(str)
 		return
 	}
 
@@ -335,13 +341,18 @@ func (t *Torrent) calculatePieceSize(index int) int {
 // Download downloads the torrent. This stores the entire file in memory.
 func (t *Torrent) Download() ([]byte, error) {
 	log.Infof("Starting download for %s", t.Name)
+
 	// Init queues for workers to retrieve work and send results
 	t.workQueue = make(chan *pieceWork, len(t.PieceHashes))
-	t.results = make(chan *pieceResult)
+	defer close(t.workQueue)
 	for index, hash := range t.PieceHashes {
 		length := t.calculatePieceSize(index)
 		t.workQueue <- &pieceWork{index, hash, length}
 	}
+	t.results = make(chan *pieceResult)
+	defer close(t.results)
+	t.err = make(chan error)
+	defer close(t.err)
 
 	// Start workers
 	for peer := range t.PeerSet.Peers {
@@ -352,20 +363,26 @@ func (t *Torrent) Download() ([]byte, error) {
 	// Collect results into a buffer until full
 	buf := make([]byte, t.Length)
 	t.NumDownloadedPieces = 0
+	numFailedWorkers := 0
 	for t.NumDownloadedPieces < len(t.PieceHashes) {
-		res := <-t.results
-		begin, end := t.calculateBoundsForPiece(res.index)
-		copy(buf[begin:end], res.buf)
-		t.NumDownloadedPieces++
+		select {
+		case res := <-t.results:
+			begin, end := t.calculateBoundsForPiece(res.index)
+			copy(buf[begin:end], res.buf)
+			t.NumDownloadedPieces++
 
-		// numWorkers := runtime.NumGoroutine() - 1 // subtract 1 for main thread
-		if t.NumDownloadedPieces%30 == 0 {
-			percent := float64(t.NumDownloadedPieces) / float64(len(t.PieceHashes)) * 100
-			log.Infof("(%0.2f%%) Downloaded piece #%d from %d", percent, res.index, len(t.PieceHashes))
+			// numWorkers := runtime.NumGoroutine() - 1 // subtract 1 for main thread
+			if t.NumDownloadedPieces%30 == 0 {
+				percent := float64(t.NumDownloadedPieces) / float64(len(t.PieceHashes)) * 100
+				log.Infof("(%0.2f%%) Downloaded piece #%d from %d", percent, res.index, len(t.PieceHashes))
+			}
+		case err := <-t.err:
+			numFailedWorkers += 1
+			if numFailedWorkers >= len(t.PeerSet.Peers) {
+				return nil, err
+			}
 		}
-
 	}
-	close(t.workQueue)
 	for i, v := range t.Conns {
 		log.Debugf("Checking con %d for metrics", i)
 		m := v.GetMetrics()
