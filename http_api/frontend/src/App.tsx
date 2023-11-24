@@ -42,7 +42,7 @@ export default function App() {
         <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
           <Toolbar>
             <Typography variant="h6" noWrap component="div">
-              BitTorrent-over-SCION User Interface
+              BitTorrent-over-SCION
             </Typography>
           </Toolbar>
         </AppBar>
