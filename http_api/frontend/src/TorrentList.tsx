@@ -15,7 +15,7 @@ import {
   Paper,
   Stack
 } from "@mui/material";
-import AddTorrentButton from "./AddTorrentButton.tsx";
+import DownloadTorrentButton from "./DownloadTorrentButton.tsx";
 import {OverridableStringUnion} from "@mui/types";
 import {filesize} from "filesize";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -23,6 +23,7 @@ import DeleteTorrentIconButton from "./DeleteTorrentIconButton.tsx";
 import ViewTorrentIconButton from "./ViewTorrentIconButton.tsx";
 import CircularProgressWithLabel from "./CircularProgressWithLabel.tsx";
 import SeedSwitch from "./SeedSwitch.tsx";
+import SeedTorrentButton from "./SeedTorrentButton.tsx";
 
 interface TorrentListProps {
   apiConfig: ApiConfig,
@@ -73,7 +74,10 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
     return (
       <Grid container rowSpacing={1} sx={{ width: '78vw' }}>
         <Grid item xs={12}>
-          <AddTorrentButton apiConfig={this.props.apiConfig}/>
+          <Stack direction="row" spacing={1}>
+            <DownloadTorrentButton apiConfig={this.props.apiConfig} />
+            <SeedTorrentButton apiConfig={this.props.apiConfig} />
+          </Stack>
         </Grid>
         <Grid item xs={12}>
           <Paper elevation={3}>

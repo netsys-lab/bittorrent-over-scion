@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -147,16 +148,10 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		return
 	}
 
-	peer := r.FormValue("peer")
-	if len(peer) == 0 {
-		errorHandler(w, http.StatusBadRequest, "field \"peer\" as part of POST form data is missing")
-		return
-	}
-
 	var err error
 	seedOnCompletionStr := r.FormValue("seedOnCompletion")
 	seedOnCompletionBool := false
-	if len(peer) > 0 {
+	if len(seedOnCompletionStr) > 0 {
 		seedOnCompletionBool, err = strconv.ParseBool(seedOnCompletionStr)
 		if err != nil {
 			errorHandler(w, http.StatusBadRequest, "invalid value for field \"seedOnCompletion\" specified (boolean wanted)")
@@ -174,14 +169,16 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		}
 	}
 
-	file, fileHdr, err := r.FormFile("torrentFile")
+	/* handle uploaded torrent file */
+
+	file, remoteFileHdr, err := r.FormFile("torrentFile")
 	if err != nil {
 		errorHandler(w, http.StatusBadRequest, "file field \"torrentFile\" as part of POST form data is missing")
 		return
 	}
 
-	// read torrent file into byte slice
-	fileBuf := make([]byte, fileHdr.Size)
+	// read torrent remoteFile into byte slice
+	fileBuf := make([]byte, remoteFileHdr.Size)
 	_, err = file.Read(fileBuf)
 	if err != nil {
 		errorHandler(w, http.StatusInternalServerError, "torrent file could not be read")
@@ -197,26 +194,53 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	log.Debugf("TorrentFile{Announce: \"%s\", Length: %d, Name: \"%s\", PieceLength: %d}", torrentFile.Announce, torrentFile.Length, torrentFile.Name, torrentFile.PieceLength)
 	//TODO add tracker to trackers once it is actually parsed from torrent file
 
-	// construct Torrent object
+	err = file.Close()
+	if err != nil {
+		errorHandler(w, http.StatusInternalServerError, "torrent file could not be closed")
+		return
+	}
+
+	// construct internal torrent representation
 	torrent := &storage.Torrent{
 		// persisted in database
-		FriendlyName:     fileHdr.Filename,
+		FriendlyName:     remoteFileHdr.Filename,
 		State:            storage.StateNotStartedYet,
-		Peer:             peer,
 		SeedOnCompletion: seedOnCompletionBool,
 		SeedPort:         uint16(seedPortNum),
-		//TODO multiple files per torrent
-		Files: []storage.File{
-			{
-				Path:   torrentFile.Name,
-				Length: uint64(torrentFile.Length),
-			},
-		},
-		RawTorrentFile: fileBuf,
+		RawTorrentFile:   fileBuf,
 
 		// only in-memory
 		Metrics:     &storage.TorrentMetrics{},
 		TorrentFile: &torrentFile,
+	}
+
+	// add files to the torrent representation (potentially saving files to disk will be done later because we need torrent ID autoincrement from database)
+	remoteFileHdrs := r.MultipartForm.File["files"]
+	// if there are no files provided, add a dummy file so that it is displayed in UI and can be updated by leecher
+	// (information comes from torrent file only)
+	//TODO multiple files per torrent
+	if len(remoteFileHdrs) == 0 {
+		torrent.Files = append(torrent.Files, storage.File{
+			Path:   torrentFile.Name,
+			Length: uint64(torrentFile.Length),
+		})
+	}
+	// otherwise, the metadata is taken from the uploaded files in the POST data
+	//TODO this should probably be deferred from torrentfile metadata once multiple files are supported
+	for _, remoteFileHdr = range remoteFileHdrs {
+		torrent.Files = append(torrent.Files, storage.File{
+			Path:     remoteFileHdr.Filename,
+			Length:   uint64(remoteFileHdr.Size),
+			Progress: uint64(remoteFileHdr.Size),
+		})
+	}
+
+	// peer only needed when there is anything to download basically
+	torrent.Peer = r.FormValue("peer")
+	//TODO consideration of partial downloads in multiple files are supported in future
+	if len(remoteFileHdrs) == 0 && len(torrent.Peer) == 0 {
+		errorHandler(w, http.StatusBadRequest, "field \"peer\" as part of POST form data is missing (or upload all files instead)")
+		return
 	}
 
 	// put it in database
@@ -226,14 +250,81 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		return
 	}
 
+	// create file directory if not existing
+	fileDir := torrent.GetFileDir(api.Storage.FS)
+	err = os.MkdirAll(fileDir, os.ModePerm)
+	if err != nil {
+		errorHandler(w, http.StatusInternalServerError, "could not create file directory")
+		return
+	}
+
+	// save files to disk
+	errStr := ""
+	for _, remoteFileHdr = range remoteFileHdrs {
+		remoteFile, err := remoteFileHdr.Open()
+		if err != nil {
+			errStr = "one of the remote files could not be parsed"
+			break
+		}
+
+		localFile, err := os.Create(filepath.Join(fileDir, remoteFileHdr.Filename))
+		if err != nil {
+			errStr = "one of the local files could not be created"
+			break
+		}
+
+		_, err = io.Copy(localFile, remoteFile)
+		if err != nil {
+			errStr = "one of the files could not be copied"
+			break
+		}
+
+		err = localFile.Close()
+		if err != nil {
+			errStr = "one of the local files could not be closed"
+			break
+		}
+
+		err = remoteFile.Close()
+		if err != nil {
+			errorHandler(w, http.StatusInternalServerError, "one of the remote files could not be closed")
+			return
+		}
+	}
+	// delete from persistent storage again, so it does not phantom on next startup
+	if len(errStr) > 0 {
+		result := api.Storage.DB.Delete(torrent)
+		if result.Error != nil {
+			errorHandler(w, http.StatusInternalServerError, "database error")
+			return
+		}
+
+		errorHandler(w, http.StatusInternalServerError, errStr)
+		return
+	}
+
 	// also put it in memory
 	api.torrents[torrent.ID] = torrent
 
-	// start torrent
-	ctx, cancel := context.WithCancel(context.Background())
-	go api.RunLeecher(ctx, torrent)
-	torrent.CancelFunc = &cancel
-	//TODO make cancellation actually possible
+	// start leecher if something needs to be downloaded
+	//TODO later on, when multiple files are supported, you could still start the leecher if one or more files are still missing (partial downloads)
+	if len(remoteFileHdrs) == 0 {
+		ctx, cancel := context.WithCancel(context.Background())
+		go api.RunLeecher(ctx, torrent)
+		torrent.CancelFunc = &cancel
+		//TODO make cancellation actually possible
+	} else {
+		// mark torrent as finished
+		//TODO when multiple files are supported, this is not necessarily true when only partial files where provided
+		torrent.State = storage.StateFinishedSuccessfully
+
+		// start seeder if requested
+		if torrent.SeedOnCompletion {
+			ctx, cancel := context.WithCancel(context.Background())
+			go api.RunSeeder(ctx, torrent)
+			torrent.CancelFunc = &cancel
+		}
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	defaultHandler(w, torrent)

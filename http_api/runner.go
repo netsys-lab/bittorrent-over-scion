@@ -80,16 +80,9 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 
 	torrent.SaveState(api.Storage.DB, storage.StateRunning, "")
 
-	// create output directory if not existing
-	outPath := torrent.GetFileDir(api.Storage.FS)
-	err := os.MkdirAll(outPath, os.ModePerm)
-	if err != nil {
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedFailed, err.Error())
-		return
-	}
-
-	// add file name
+	// get path of first file
 	//TODO support multiple files & directory trees
+	outPath := torrent.GetFileDir(api.Storage.FS)
 	if len(torrent.Files[0].Path) == 0 {
 		outPath = filepath.Join(outPath, "file")
 	} else {
@@ -102,7 +95,7 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 
 	// generate random peer ID
 	var peerID [20]byte
-	_, err = rand.Read(peerID[:])
+	_, err := rand.Read(peerID[:])
 	if err != nil {
 		torrent.SaveState(api.Storage.DB, storage.StateFinishedFailed, err.Error())
 		return
@@ -222,7 +215,7 @@ func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
 		// turn off seeding so that the user can try again to reactivate it
 		resetSeeder(torrent)
 
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "Seeding failed: "+err.Error())
 		return
 	}
 

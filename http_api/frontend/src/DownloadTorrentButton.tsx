@@ -14,11 +14,11 @@ import { MuiFileInput } from 'mui-file-input';
 import { useSnackbar } from 'notistack';
 import ApiConfig from "./ApiConfig.tsx";
 
-interface AddTorrentButtonProps {
+interface DownloadTorrentButtonProps {
   apiConfig: ApiConfig
 }
 
-export default function AddTorrentButton({apiConfig} : AddTorrentButtonProps) {
+export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButtonProps) {
   const { enqueueSnackbar} = useSnackbar();
 
   const [open, setOpen] = useState(false);
@@ -36,7 +36,7 @@ export default function AddTorrentButton({apiConfig} : AddTorrentButtonProps) {
     setError(null);
   };
 
-  const handleClickAdd = async () => {
+  const handleClickStart = async () => {
     if (file == null) {
       setError("Torrent file needs to be selected!");
       return;
@@ -75,10 +75,10 @@ export default function AddTorrentButton({apiConfig} : AddTorrentButtonProps) {
   return (
     <div>
       <Button variant="contained" onClick={() => setOpen(true)}>
-        Add Torrent
+        Download Remote Torrent
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>Add Torrent</DialogTitle>
+        <DialogTitle>Download Remote Torrent</DialogTitle>
         <DialogContent>
           {/*<DialogContentText>
             To subscribe to this website, please enter your email address here. We
@@ -138,7 +138,7 @@ export default function AddTorrentButton({apiConfig} : AddTorrentButtonProps) {
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={clearFields}>Clear</Button>
-          <Button onClick={handleClickAdd}>Add</Button>
+          <Button onClick={handleClickStart}>Start</Button>
         </DialogActions>
       </Dialog>
     </div>
