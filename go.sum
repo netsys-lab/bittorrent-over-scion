@@ -598,7 +598,6 @@ github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a
 github.com/netsec-ethz/rains v0.2.0 h1:i+z8ws/d56U0XoqVjom4OFfXkUYK1utXrKPPiGDbdME=
 github.com/netsec-ethz/rains v0.2.0/go.mod h1:NrbQhiP83DBH2ZsCPJb2vCNXbl0BbGMmMJOatL0bavk=
 github.com/netsec-ethz/scion-apps v0.3.0/go.mod h1:IZ5cXZZ5wfTeXfDQOZV0oRQ7T6VJBt5bfyjhdyo8DkE=
-github.com/netsec-ethz/scion-apps v0.3.0/go.mod h1:IZ5cXZZ5wfTeXfDQOZV0oRQ7T6VJBt5bfyjhdyo8DkE=
 github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f h1:TElJhHXnF7iT/gqxRam4JOWXijAzhpYBC9qWHawxJCY=
 github.com/netsec-ethz/scion-apps v0.3.1-0.20210924130723-be84cbd98c1f/go.mod h1:38N/jVYtBJsjCyztk+vqAcXpzEgJMirmSGzB7w4oCGQ=
 github.com/netsys-lab/dht v0.1.18 h1:15IIZwb0Is0z3McM9MOCuRqeMEOp0DKHdQxrUO1glkI=

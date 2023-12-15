@@ -3,11 +3,13 @@ package http_api
 import (
 	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -533,8 +535,17 @@ func (api *HttpApi) LoadFromStorage() error {
 	return nil
 }
 
+//go:embed frontend/dist/*
+var static embed.FS
+
 func (api *HttpApi) ListenAndServe() error {
 	api.usedUdpPorts = make(map[uint16]bool)
+
+	frontend, err := fs.Sub(static, "frontend/dist")
+	if err != nil {
+		log.Error("Could not load static assets!")
+		return err
+	}
 
 	router := httprouter.New()
 	router.GET("/api/info", getInfoHandler)
@@ -548,7 +559,7 @@ func (api *HttpApi) ListenAndServe() error {
 	router.POST("/api/tracker", addTrackerHandler)
 	router.DELETE("/api/torrent/:torrent", deleteTorrentByIdHandler)
 	router.DELETE("/api/tracker/:tracker", deleteTrackerByIdHandler)
-	router.ServeFiles("/frontend/*filepath", AssetFile())
+	router.ServeFiles("/frontend/*filepath", http.FS(frontend))
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", api.Port),
