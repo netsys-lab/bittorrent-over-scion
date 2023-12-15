@@ -1,5 +1,5 @@
 export default class ApiConfig {
-    public apiEndpoint = () => "http://127.0.0.1:8000/api";
+    public apiEndpoint = () => "/api";
     public torrentEndpoint = (torrentId?: number) => {
         let str = this.apiEndpoint() + "/torrent";
         if (typeof(torrentId) !== 'undefined') {
