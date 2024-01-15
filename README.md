@@ -45,16 +45,13 @@ At least the following command line flags are required:
 - `peer`: The full remote SCION address, of format `ISD-AS,[IP]:Port`,
 
 ### Run HTTP API & frontend
-The following command starts up an API that permits running & managing multiple parallel leechers & seeders on `http://localhost:8000/api`.
+The following command starts up an API that permits running & managing multiple parallel leechers & seeders on `http://0.0.0.0:8000/api`.
 It also serves a frontend at `http://0.0.0.0:8000/frontend` that can be used optionally at your convenience.
 ```
-./bittorrent-over-scion -httpApi -local="19-ffaa:1:111,[127.0.0.1]"
+./bittorrent-over-scion -httpApi"
 ```
 
-At least the following command line flags are required:
-- `httpApi`: Start HTTP API instead of leecher or seeder
-- `local`: The full local SCION address, of format `ISD-AS,[IP]` (without port)
-
+As of now, both the API and frontend will not be available over SCION, only on the conventional IP network stack.
 Please note that port forwarding of port `8000` might be necessary if you want to use the program from within a SCIONLab VM or similar.
 
 ### Help Info
