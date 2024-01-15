@@ -1,5 +1,10 @@
 export default class ApiConfig {
-    public apiEndpoint = () => "/api";
+    public apiEndpoint = () => {
+        if (import.meta.env.DEV) {
+            return "http://localhost:8000/api";
+        }
+        return "/api";
+    }
     public torrentEndpoint = (torrentId?: number) => {
         let str = this.apiEndpoint() + "/torrent";
         if (typeof(torrentId) !== 'undefined') {
