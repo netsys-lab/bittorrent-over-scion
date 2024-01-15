@@ -24,8 +24,8 @@ import (
 )
 
 type HttpApi struct {
-	Port              int
-	LocalHost         string
+	LocalAddr         string
+	ScionLocalHost    string
 	NumPaths          int
 	DialBackStartPort uint16
 	SeedStartPort     uint16
@@ -562,7 +562,7 @@ func (api *HttpApi) ListenAndServe() error {
 	router.ServeFiles("/frontend/*filepath", http.FS(frontend))
 
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%d", api.Port),
+		Addr: api.LocalAddr,
 		Handler: cors.New(cors.Options{
 			AllowedMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
 		}).Handler(router),
@@ -571,6 +571,6 @@ func (api *HttpApi) ListenAndServe() error {
 		},
 	}
 
-	log.Infof("[HTTP API] Listening on 0.0.0.0:%d, frontend available at: http://localhost:%d/frontend", api.Port, api.Port)
+	log.Infof("[HTTP API] Listening on %s, frontend available at: http://%s/frontend", api.LocalAddr, api.LocalAddr)
 	return server.ListenAndServe()
 }

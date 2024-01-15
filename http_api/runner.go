@@ -124,14 +124,14 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 		PieceLength:                 torrent.TorrentFile.PieceLength,
 		Length:                      torrent.TorrentFile.Length,
 		Name:                        torrent.TorrentFile.Name,
-		Local:                       api.LocalHost,
+		Local:                       api.ScionLocalHost,
 		PathSelectionResponsibility: "server",
 		DiscoveryConfig:             &peerDiscoveryConfig,
 		Conns:                       make([]packets.UDPConn, 0),
 	}
 
 	if peerDiscoveryConfig.EnableDht {
-		peerAddr, err := snet.ParseUDPAddr(api.LocalHost)
+		peerAddr, err := snet.ParseUDPAddr(api.ScionLocalHost)
 		peerPort := uint16(peerAddr.Host.Port)
 		nodeAddr := peerAddr.Copy()
 		nodeAddr.Host.Port = int(peerDiscoveryConfig.DhtPort)
@@ -254,8 +254,8 @@ func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
 
 	// set host
 	var localAddr *snet.UDPAddr
-	if api.LocalHost != "" {
-		localAddr, err = snet.ParseUDPAddr(api.LocalHost)
+	if api.ScionLocalHost != "" {
+		localAddr, err = snet.ParseUDPAddr(api.ScionLocalHost)
 	} else {
 		localAddr, err = util.GetDefaultLocalAddr() //TODO currently wastes a port
 	}
