@@ -24,6 +24,7 @@ import ViewTorrentIconButton from "./ViewTorrentIconButton.tsx";
 import CircularProgressWithLabel from "./CircularProgressWithLabel.tsx";
 import SeedSwitch from "./SeedSwitch.tsx";
 import SeedTorrentButton from "./SeedTorrentButton.tsx";
+import CancelTorrentIconButton from "./CancelTorrentIconButton.tsx";
 
 interface TorrentListProps {
   apiConfig: ApiConfig,
@@ -85,6 +86,8 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
               {Object.keys(this.state.torrents).map((value) => {
                 const torrentId = parseInt(value);
                 const torrent = this.state.torrents[torrentId];
+                let seedSwitch = <></>;
+                let cancelButton = <></>;
                 let downloadButton = <></>;
                 let deleteButton = <></>;
                 let progress = <></>;
@@ -98,6 +101,7 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                     progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
                     progressColor = 'info';
                     status = `${torrent.numDownloadedPieces}/${torrent.numPieces} pieces | rx: ${filesize(torrent.metrics.rx, {bits: true})}/s | tx: ${filesize(torrent.metrics.tx, {bits: true})}/s | #conns: ${torrent.metrics.numConns} | #paths: ${torrent.metrics.numPaths}`
+                    cancelButton = <CancelTorrentIconButton apiConfig={this.props.apiConfig} torrentId={torrentId} />;
                     break;
                   case 'completed':
                     progressValue = 100;
@@ -126,7 +130,7 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                   case 'failed':
                     progressValue = torrent.numDownloadedPieces / torrent.numPieces * 100;
                     progressColor = 'error';
-                    status = 'Dowloading torrent failed: ' + torrent.status;
+                    status = 'Downloading torrent failed: ' + torrent.status;
                     finished = true;
                     break;
                   case 'cancelled':
@@ -160,6 +164,13 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                   progress = <CircularProgressWithLabel variant="determinate" label={`${Math.round(progressValue)}%`} value={progressValue} color={progressColor} />;
                 }
 
+                if (torrent.state == 'seeding' || torrent.state == 'completed') {
+                  seedSwitch = <>
+                    <SeedSwitch apiConfig={this.props.apiConfig} torrentId={torrentId} seedOnCompletion={torrent.seedOnCompletion} />
+                    <Divider orientation="vertical" variant="middle" flexItem />
+                  </>;
+                }
+
                 if (finished || torrent.state == 'not started yet') {
                   deleteButton = <DeleteTorrentIconButton apiConfig={this.props.apiConfig} torrentId={torrentId} />;
                 }
@@ -169,10 +180,10 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                     key={value}
                     secondaryAction={
                       <Stack direction="row" spacing={1}>
-                        <SeedSwitch apiConfig={this.props.apiConfig} torrentId={torrentId} seedOnCompletion={torrent.seedOnCompletion} />
-                        <Divider orientation="vertical" variant="middle" flexItem />
+                        {seedSwitch}
                         <ViewTorrentIconButton apiConfig={this.props.apiConfig} torrent={torrent} />
                         {downloadButton}
+                        {cancelButton}
                         {deleteButton}
                       </Stack>
                     }

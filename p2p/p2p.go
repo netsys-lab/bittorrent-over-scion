@@ -5,6 +5,7 @@ package p2p
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -179,17 +180,23 @@ func checkIntegrity(pw *pieceWork, buf []byte) error {
 	return nil
 }
 
-func (t *Torrent) startDownloadWorker(peer peers.Peer) {
+func (t *Torrent) startDownloadWorker(ctx context.Context, peer peers.Peer) {
 	mpC := client.NewMPClient()
 	var clients []*client.Client
+	var wg sync.WaitGroup
 	var err error
 	if t.PathSelectionResponsibility == "server" {
-		clients, err = mpC.DialAndWaitForConnectBack(t.Local, peer, t.PeerID, t.InfoHash, t.DiscoveryConfig, t.DhtNode)
+		clients, err = mpC.DialAndWaitForConnectBack(ctx, t.Local, peer, t.PeerID, t.InfoHash, t.DiscoveryConfig, t.DhtNode)
 		if err != nil {
 			log.Error(err)
-			str := fmt.Sprintf("Could not handshake with %s. Disconnecting!", peer)
-			log.Error(str)
-			t.err <- errors.New(str)
+
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				t.err <- err
+			} else {
+				str := fmt.Sprintf("Could not handshake with %s", peer)
+				t.err <- errors.New(str)
+			}
+
 			return
 		}
 
@@ -230,6 +237,7 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 							DiscoveryConfig: clients[0].DiscoveryConfig,
 						}
 						clients = append(clients, &c)
+						wg.Add(1)
 						go func(c *client.Client) {
 							log.Infof("Starting Download from new client")
 							t.Lock()
@@ -237,6 +245,12 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 							t.Unlock()
 							c.Handshake()
 							for pw := range t.workQueue {
+								// check if we should not continue to process pieces
+								if ctx.Err() != nil {
+									wg.Done()
+									return
+								}
+
 								if !c.Bitfield.HasPiece(pw.index) {
 									t.workQueue <- pw // Put piece back on the queue
 									continue
@@ -249,32 +263,40 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 									c.Conn.Close()
 									c.Conn.SetId("TMP")
 									t.workQueue <- pw // Put piece back on the queue
+									wg.Done()
 									return
 								}
 
 								c.SendHave(pw.index)
 								t.results <- &pieceResult{pw.index, buf}
 							}
+							wg.Done()
 						}(&c)
 					}
 				}
-
 			}
 		}()
 	} else {
 		str := "Client based pathselection not supported"
 		log.Error(str)
+
 		t.err <- errors.New(str)
 		return
 	}
 
 	log.Infof("Completed handshake with %s, got %d clients", peer, len(clients))
 	log.Infof("Starting download...")
-	var wg sync.WaitGroup
+
 	for _, c := range clients {
 		wg.Add(1)
 		go func(c *client.Client) {
 			for pw := range t.workQueue {
+				// check if we should not continue to process pieces
+				if ctx.Err() != nil {
+					wg.Done()
+					return
+				}
+
 				if !c.Bitfield.HasPiece(pw.index) {
 					t.workQueue <- pw // Put piece back on the queue
 					continue
@@ -307,13 +329,20 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 
 	}
 	wg.Wait()
-	log.Debug("Return from startDownloadWorker")
+
+	// do not "restart" the download worker in case the context was cancelled
+	if ctx.Err() != nil {
+		log.Debug("Context cancelled")
+		t.err <- ctx.Err()
+		return
+	}
+
 	select {
 	case p, ok := <-t.workQueue:
 		if ok {
 			log.Debug("Got not downloaded pieces, retrying...")
 			t.workQueue <- p
-			t.startDownloadWorker(peer)
+			t.startDownloadWorker(ctx, peer)
 		} else {
 			log.Debug("No further pieces, done")
 			return
@@ -322,6 +351,8 @@ func (t *Torrent) startDownloadWorker(peer peers.Peer) {
 		log.Info("No further pieces, done")
 		return
 	}
+
+	log.Debug("Return from startDownloadWorker")
 }
 
 func (t *Torrent) calculateBoundsForPiece(index int) (begin int, end int) {
@@ -339,7 +370,7 @@ func (t *Torrent) calculatePieceSize(index int) int {
 }
 
 // Download downloads the torrent. This stores the entire file in memory.
-func (t *Torrent) Download() ([]byte, error) {
+func (t *Torrent) Download(ctx context.Context) ([]byte, error) {
 	log.Infof("Starting download for %s", t.Name)
 
 	// Init queues for workers to retrieve work and send results
@@ -357,7 +388,7 @@ func (t *Torrent) Download() ([]byte, error) {
 	// Start workers
 	for peer := range t.PeerSet.Peers {
 		// time.Sleep(100 * time.Millisecond)
-		go t.startDownloadWorker(peer)
+		go t.startDownloadWorker(ctx, peer)
 	}
 
 	// Collect results into a buffer until full
@@ -401,13 +432,13 @@ func (t *Torrent) Download() ([]byte, error) {
 	return buf, nil
 }
 
-func (t *Torrent) EnableDht(addr *snet.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
+func (t *Torrent) EnableDht(ctx context.Context, addr *snet.UDPAddr, peerPort uint16, infoHash [20]byte, startingNodes []dht.Addr) (*dht_node.DhtNode, error) {
 	node, err := dht_node.New(addr, infoHash, startingNodes, peerPort, func(peer peers.Peer) {
 		peerKnown := t.hasPeer(peer)
 		log.Infof("received peer via dht: %s, peer already known: %t", peer, peerKnown)
 		t.PeerSet.Add(peer)
 		if !peerKnown { // dont start two worker for same peer
-			go t.startDownloadWorker(peer)
+			go t.startDownloadWorker(ctx, peer)
 		}
 	})
 	return node, err

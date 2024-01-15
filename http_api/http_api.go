@@ -388,6 +388,25 @@ func updateTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 		return
 	}
 
+	action := r.FormValue("action")
+	if len(action) > 0 {
+		if action == "cancel" {
+			if torrent.State == storage.StateRunning {
+				(*torrent.CancelFunc)()
+
+				w.WriteHeader(http.StatusOK)
+				defaultHandler(w, torrent)
+			} else {
+				errorHandler(w, http.StatusBadRequest, "torrent must be running to cancel it")
+			}
+		} else {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"action\" (must be one of the following: 'cancel')")
+		}
+
+		// no save needed, the cancellation will handle saving state, hopefully
+		return
+	}
+
 	seedOnCompletionStr := r.FormValue("seedOnCompletion")
 	if len(seedOnCompletionStr) > 0 {
 		seedOnCompletionBool, err := strconv.ParseBool(seedOnCompletionStr)
@@ -417,7 +436,6 @@ func updateTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 
 	w.WriteHeader(http.StatusOK)
 	defaultHandler(w, torrent)
-
 }
 
 func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {

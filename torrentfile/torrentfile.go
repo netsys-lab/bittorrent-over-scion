@@ -5,6 +5,7 @@ package torrentfile
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"errors"
@@ -94,18 +95,20 @@ func (t *TorrentFile) DownloadToFile(path string, peer string, local string, pat
 		Conns:                       make([]packets.UDPConn, 0),
 	}
 
+	ctx := context.Background()
+
 	if pc.EnableDht {
 		peerAddr, err := snet.ParseUDPAddr(local)
 		peerPort := uint16(peerAddr.Host.Port)
 		nodeAddr := peerAddr.Copy()
 		nodeAddr.Host.Port = int(pc.DhtPort)
-		torrent.DhtNode, err = torrent.EnableDht(nodeAddr, peerPort, t.InfoHash, append(t.Nodes, pc.DhtNodes...))
+		torrent.DhtNode, err = torrent.EnableDht(ctx, nodeAddr, peerPort, t.InfoHash, append(t.Nodes, pc.DhtNodes...))
 		if err != nil {
 			log.Println("could not enable dht")
 		}
 	}
 
-	buf, err := torrent.Download()
+	buf, err := torrent.Download(ctx)
 	if err != nil {
 		return nil, err
 	}

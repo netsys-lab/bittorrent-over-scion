@@ -73,12 +73,6 @@ func resetSeeder(torrent *storage.Torrent) {
 }
 
 func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
-	// this is just a simple test for cancellation, a code snippet to be used later
-	if errors.Is(ctx.Err(), context.Canceled) {
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "cancelled by user")
-		return
-	}
-
 	torrent.SaveState(api.Storage.DB, storage.StateRunning, "")
 
 	// get path of first file
@@ -136,6 +130,7 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 		nodeAddr := peerAddr.Copy()
 		nodeAddr.Host.Port = int(peerDiscoveryConfig.DhtPort)
 		torrent.P2pTorrent.DhtNode, err = torrent.P2pTorrent.EnableDht(
+			ctx,
 			nodeAddr,
 			peerPort,
 			torrent.TorrentFile.InfoHash,
@@ -157,11 +152,15 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 
 	// download single file
 	//TODO multiple files per torrent
-	buf, err := torrent.P2pTorrent.Download()
+	buf, err := torrent.P2pTorrent.Download(ctx)
 	stopMetricsCollection <- true
 	time.Sleep(4 * time.Second) // to not have race conditions when writing status
 	if err != nil {
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedFailed, err.Error())
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "")
+		} else {
+			torrent.SaveState(api.Storage.DB, storage.StateFinishedFailed, err.Error())
+		}
 		return
 	}
 
@@ -196,12 +195,6 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 }
 
 func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
-	// this is just a simple test for cancellation, a code snippet to be used later
-	if errors.Is(ctx.Err(), context.Canceled) {
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "cancelled by user")
-		return
-	}
-
 	outPath := torrent.GetFileDir(api.Storage.FS)
 	if len(torrent.Files[0].Path) == 0 {
 		outPath = filepath.Join(outPath, "file")
@@ -304,7 +297,7 @@ func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "")
 		} else {
-			torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+			torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "Seeding failed: "+err.Error())
 		}
 		return
 	}
