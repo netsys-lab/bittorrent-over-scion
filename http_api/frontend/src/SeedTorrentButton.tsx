@@ -101,11 +101,10 @@ export default function SeedTorrentButton({apiConfig} : SeedTorrentButtonProps) 
           />
           <FormControlLabel control={
             <Checkbox
-              value={seedImmediately}
+              checked={seedImmediately}
               onChange={(event: ChangeEvent<HTMLInputElement>) => {
                setSeedImmediately(event.currentTarget.checked);
               }}
-              checked={true}
             />
           } label="Start seeding immediately" />
          <TextField

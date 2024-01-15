@@ -143,9 +143,9 @@ func getTrackerByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.
 func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
 
-	// limit request body (torrent file) to 128 MByte
+	// limit request body (torrent file)
 	r.Body = http.MaxBytesReader(w, r.Body, int64(api.MaxRequestBodySize))
-	err := r.ParseForm()
+	err := r.ParseMultipartForm(int64(api.MaxRequestBodySize))
 	if err != nil {
 		errorHandler(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body too large (maximum %d bytes)", api.MaxRequestBodySize))
 		return
