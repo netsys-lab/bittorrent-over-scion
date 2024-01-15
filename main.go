@@ -25,7 +25,7 @@ var flags = struct {
 	File              string `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
 	Local             string `help:"Local SCION address of the seeder"`
 	HttpApi           bool   `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
-	HttpApiAddr       string `help:"Optional: Configure the IP and port the HTTP API will bind on (default 0.0.0.0:8000). Only for httpApi=true"`
+	HttpApiAddr       string `help:"Optional: Configure the IP and port the HTTP API will bind on (default 127.0.0.1:8000). Only for httpApi=true"`
 	HttpApiMaxSize    int    `help:"Optional: Set the maximum size in bytes that is uploadable through HTTP API at once (all files in total, more specifically the maximum request body size, default ~128 MByte). Only for httpApi=true"`
 	SeedStartPort     int    `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
 	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
@@ -39,7 +39,7 @@ var flags = struct {
 }{
 	Seed:              false,
 	HttpApi:           false,
-	HttpApiAddr:       "0.0.0.0:8000",
+	HttpApiAddr:       "127.0.0.1:8000",
 	HttpApiMaxSize:    128 * 1000000, // 128 MByte
 	SeedStartPort:     44000,
 	NumPaths:          0,
