@@ -26,6 +26,7 @@ var flags = struct {
 	Local             string `help:"Local SCION address of the seeder"`
 	HttpApi           bool   `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
 	HttpApiAddr       string `help:"Optional: Configure the IP and port the HTTP API will bind on (default 0.0.0.0:8000). Only for httpApi=true"`
+	HttpApiMaxSize    int    `help:"Optional: Set the maximum size in bytes that is uploadable through HTTP API at once (all files in total, more specifically the maximum request body size, default ~128 MByte). Only for httpApi=true"`
 	SeedStartPort     int    `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
 	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
 	DialBackStartPort int    `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
@@ -39,6 +40,7 @@ var flags = struct {
 	Seed:              false,
 	HttpApi:           false,
 	HttpApiAddr:       "0.0.0.0:8000",
+	HttpApiMaxSize:    128 * 1000000, // 128 MByte
 	SeedStartPort:     44000,
 	NumPaths:          0,
 	DialBackStartPort: 45000,
@@ -88,15 +90,16 @@ func main() {
 
 		log.Info("[HTTP API] Loading existing torrent tasks from storage...")
 		api := http_api.HttpApi{
-			LocalAddr:         flags.HttpApiAddr,
-			EnableDht:         flags.EnableDht, //TODO make this configurable per torrent?
-			DhtPort:           uint16(flags.DhtPort),
-			DhtBootstrapAddr:  flags.DhtBootstrapAddr,
-			ScionLocalHost:    flags.Local,
-			NumPaths:          flags.NumPaths,
-			DialBackStartPort: uint16(flags.DialBackStartPort),
-			SeedStartPort:     uint16(flags.SeedStartPort),
-			Storage:           storage_,
+			LocalAddr:          flags.HttpApiAddr,
+			MaxRequestBodySize: flags.HttpApiMaxSize,
+			EnableDht:          flags.EnableDht, //TODO make this configurable per torrent?
+			DhtPort:            uint16(flags.DhtPort),
+			DhtBootstrapAddr:   flags.DhtBootstrapAddr,
+			ScionLocalHost:     flags.Local,
+			NumPaths:           flags.NumPaths,
+			DialBackStartPort:  uint16(flags.DialBackStartPort),
+			SeedStartPort:      uint16(flags.SeedStartPort),
+			Storage:            storage_,
 		}
 		err = api.LoadFromStorage()
 		if err != nil {

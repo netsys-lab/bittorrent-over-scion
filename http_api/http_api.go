@@ -24,14 +24,15 @@ import (
 )
 
 type HttpApi struct {
-	LocalAddr         string
-	ScionLocalHost    string
-	NumPaths          int
-	DialBackStartPort uint16
-	SeedStartPort     uint16
-	EnableDht         bool
-	DhtPort           uint16
-	DhtBootstrapAddr  string
+	LocalAddr          string
+	MaxRequestBodySize int
+	ScionLocalHost     string
+	NumPaths           int
+	DialBackStartPort  uint16
+	SeedStartPort      uint16
+	EnableDht          bool
+	DhtPort            uint16
+	DhtBootstrapAddr   string
 
 	Storage *storage.Storage
 
@@ -142,15 +143,19 @@ func getTrackerByIdHandler(w http.ResponseWriter, r *http.Request, p httprouter.
 func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
 
-	// limit request body (torrent file) to 10 MByte
-	r.Body = http.MaxBytesReader(w, r.Body, 10000000)
+	// limit request body (torrent file) to 128 MByte
+	r.Body = http.MaxBytesReader(w, r.Body, int64(api.MaxRequestBodySize))
+	err := r.ParseForm()
+	if err != nil {
+		errorHandler(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body too large (maximum %d bytes)", api.MaxRequestBodySize))
+		return
+	}
 
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		errorHandler(w, http.StatusUnsupportedMediaType, "invalid content type (\"multipart/form-data\" wanted)")
 		return
 	}
 
-	var err error
 	seedOnCompletionStr := r.FormValue("seedOnCompletion")
 	seedOnCompletionBool := false
 	if len(seedOnCompletionStr) > 0 {
