@@ -266,3 +266,4 @@ out
 # End of https://www.toptal.com/developers/gitignore/api/node,goland
 
 .vite/
+seed_emu/*_output/
