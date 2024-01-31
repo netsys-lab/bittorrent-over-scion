@@ -283,7 +283,7 @@ func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
 		// turn of seeding so that the user can try again to reactivate it
 		resetSeeder(torrent)
 
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "seeding failed: "+err.Error())
+		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "Seeding failed: "+err.Error())
 		return
 	}
 

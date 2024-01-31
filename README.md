@@ -45,20 +45,24 @@ At least the following command line flags are required:
 - `peer`: The full remote SCION address, of format `ISD-AS,[IP]:Port`,
 
 ### Run HTTP API & frontend
-The following command starts up an API that permits running & managing multiple parallel leechers & seeders on `http://0.0.0.0:8000/api`.
-It also serves a frontend at `http://0.0.0.0:8000/frontend` that can be used optionally at your convenience.
+The following command starts up an API that permits running & managing multiple parallel leechers & seeders on `http://127.0.0.1:8000/api`.
+It also serves a frontend at `http://127.0.0.1:8000/frontend` that can be used optionally at your convenience.
 ```
 ./bittorrent-over-scion -httpApi"
 ```
 
 As of now, both the API and frontend will not be available over SCION, only on the conventional IP network stack.
-Please note that port forwarding of port `8000` might be necessary if you want to use the program from within a SCIONLab VM or similar.
+Please note that port forwarding of port `8000` might be necessary if you are running the HTTP server in a SCIONlab VM or similar - remember to also let the server bind on `0.0.0.0:8000` with argument `-httpApiAddr=0.0.0.0:8000` in that case.
 
 ### Help Info
 Run `bittorrent-over-scion -h` to get a full overview of all command line flags and their explanations.
 
 ### Demo Torrent
 We provide a running seeder and a sample torrent file in the [demo](https://github.com/netsys-lab/bittorrent-over-scion/tree/master/demo) folder. Please visit the readme for further information.
+
+### SEED-Emulator
+The application should run fine in [SEED-Emulator](https://github.com/seed-labs/seed-emulator), supporting all operating modes (leecher, seeder, HTTP API & frontend).
+Check out [this README](seed_emu/README.md) for more details.
 
 ## Roadmap
 - [ ] Support SCION HTTP tracker

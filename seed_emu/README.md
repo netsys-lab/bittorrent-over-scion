@@ -30,7 +30,15 @@ There is also a service that you can use to install the HTTP server with its API
 In order to use it, the binary has to be compiled to `../bittorrent-over-scion` as explained above.
 
 An example topology with two nodes running in different SCION ASes that renders to Docker containers can be found in `multi-ui.py`, showing how to utilize the service.
-The idea is that you can open multiple frontends in the browser of the system running the emulator, thus it port-forwards the HTTP ports respectively:
+Render & start with:
+
+```
+python3 multi-ui.py
+cd multi_ui_output
+docker compose up --build
+```
+
+The idea is that you open multiple frontends for every emulated host in the browser of the system running the emulator, that's why it port-forwards the HTTP ports respectively:
 
 - http://localhost:8001/
 - http://localhost:8002/
