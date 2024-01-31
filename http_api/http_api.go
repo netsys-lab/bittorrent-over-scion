@@ -6,8 +6,11 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
+	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
+	"github.com/scionproto/scion/go/lib/snet"
 	"io"
 	"io/fs"
 	"net"
@@ -39,6 +42,7 @@ type HttpApi struct {
 	torrents     map[uint64]*storage.Torrent
 	trackers     map[uint64]*storage.Tracker
 	usedUdpPorts map[uint16]bool
+	localAddr    *snet.UDPAddr
 }
 
 type ErrorResponseBody struct {
@@ -357,6 +361,9 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 
 		// start seeder if requested
 		if torrent.SeedOnCompletion {
+			// fix number of downloaded pieces (normally a leecher process would take care of updating that field)
+			torrent.P2pTorrent = &p2p.Torrent{NumDownloadedPieces: len(torrent.TorrentFile.PieceHashes)}
+
 			ctx, cancel := context.WithCancel(context.Background())
 			go api.RunSeeder(ctx, torrent)
 			torrent.CancelFunc = &cancel
@@ -594,9 +601,21 @@ var static embed.FS
 func (api *HttpApi) ListenAndServe() error {
 	api.usedUdpPorts = make(map[uint16]bool)
 
+	// resolve local SCION address
+	var err error
+	if api.ScionLocalHost != "" {
+		api.localAddr, err = snet.ParseUDPAddr(api.ScionLocalHost)
+	} else {
+		api.localAddr, err = util.GetDefaultLocalAddr() //TODO currently wastes a port
+	}
+	if err != nil {
+		log.Error("[HTTP API] Could not parse local SCION address (specified with -local argument)!")
+		return err
+	}
+
 	frontend, err := fs.Sub(static, "frontend/dist")
 	if err != nil {
-		log.Error("Could not load static assets!")
+		log.Error("[HTTP API] Could not load static assets!")
 		return err
 	}
 

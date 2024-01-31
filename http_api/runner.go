@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/server"
@@ -246,19 +245,7 @@ func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
 	}
 
 	// set host
-	var localAddr *snet.UDPAddr
-	if api.ScionLocalHost != "" {
-		localAddr, err = snet.ParseUDPAddr(api.ScionLocalHost)
-	} else {
-		localAddr, err = util.GetDefaultLocalAddr() //TODO currently wastes a port
-	}
-	if err != nil {
-		// turn of seeding so that the user can try again to reactivate it
-		resetSeeder(torrent)
-
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedSuccessfully, "Seeding failed: "+err.Error())
-		return
-	}
+	localAddr := api.localAddr.Copy()
 
 	// set port
 	localAddr.Host.Port = int(seedPort)
