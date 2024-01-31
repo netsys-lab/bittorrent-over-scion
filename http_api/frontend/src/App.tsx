@@ -22,12 +22,17 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import GroupsIcon from '@mui/icons-material/Groups';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import UploadIcon from '@mui/icons-material/Upload';
+import SwapVertIcon from '@mui/icons-material/SwapVert';
 import TorrentList from "./TorrentList";
 import TrackerList from "./TrackerList.tsx";
+import {ApiTorrentState, NonSeedingTorrentStates} from "./types.tsx";
 
 export default function App() {
   const [currentTabIndex, setCurrentTabIndex] = useState(0);
   const [settingsListOpen, setSettingsListOpen] = useState(true);
+  const [torrentsListOpen, setTorrentsListOpen] = useState(true);
   const apiConfig = new ApiConfig();
   const snackbarCloseAction = (snackbarId: SnackbarKey) => (
     <IconButton aria-label="delete" onClick={() => { closeSnackbar(snackbarId) }}>
@@ -57,13 +62,36 @@ export default function App() {
           <Toolbar />
           <Box sx={{ overflow: 'auto' }}>
             <List>
-              <ListItemButton selected={currentTabIndex === 0} onClick={() => setCurrentTabIndex(0)}>
+              <ListItemButton onClick={() => setTorrentsListOpen(!torrentsListOpen)}>
                 <ListItemIcon>
-                  <DownloadIcon />
+                  <ViewListIcon />
                 </ListItemIcon>
                 <ListItemText primary="Torrents" />
+                {torrentsListOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
               </ListItemButton>
-              <ListItemButton selected={currentTabIndex === 1} onClick={() => setCurrentTabIndex(1)}>
+              <Collapse in={torrentsListOpen} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding>
+                  <ListItemButton sx={{ pl: 4 }} selected={currentTabIndex === 0} onClick={() => setCurrentTabIndex(0)}>
+                    <ListItemIcon>
+                      <SwapVertIcon />
+                    </ListItemIcon>
+                    <ListItemText primary="All Torrents" />
+                  </ListItemButton>
+                  <ListItemButton sx={{ pl: 4 }} selected={currentTabIndex === 1} onClick={() => setCurrentTabIndex(1)}>
+                    <ListItemIcon>
+                      <DownloadIcon />
+                    </ListItemIcon>
+                    <ListItemText primary="Downloads only" />
+                  </ListItemButton>
+                  <ListItemButton sx={{ pl: 4 }} selected={currentTabIndex === 2} onClick={() => setCurrentTabIndex(2)}>
+                    <ListItemIcon>
+                      <UploadIcon />
+                    </ListItemIcon>
+                    <ListItemText primary="Seeders only" />
+                  </ListItemButton>
+                </List>
+              </Collapse>
+              <ListItemButton selected={currentTabIndex === 3} onClick={() => setCurrentTabIndex(3)}>
                 <ListItemIcon>
                   <ManageSearchIcon />
                 </ListItemIcon>
@@ -78,7 +106,7 @@ export default function App() {
               </ListItemButton>
               <Collapse in={settingsListOpen} timeout="auto" unmountOnExit>
                 <List component="div" disablePadding>
-                  <ListItemButton sx={{ pl: 4 }} selected={currentTabIndex === 2} onClick={() => setCurrentTabIndex(2)}>
+                  <ListItemButton sx={{ pl: 4 }} selected={currentTabIndex === 4} onClick={() => setCurrentTabIndex(4)}>
                     <ListItemIcon>
                       <GroupsIcon />
                     </ListItemIcon>
@@ -92,12 +120,18 @@ export default function App() {
         <Box component="main" sx={{ flexGrow: 1, p: '1vw' }}>
           <Toolbar />
           {currentTabIndex === 0 &&
-            <TorrentList apiConfig={apiConfig} />
+            <TorrentList apiConfig={apiConfig} wantedTorrentStates={[]} />
           }
           {currentTabIndex === 1 &&
-            <TrackerList apiConfig={apiConfig} />
+              <TorrentList apiConfig={apiConfig} wantedTorrentStates={NonSeedingTorrentStates} />
           }
           {currentTabIndex === 2 &&
+              <TorrentList apiConfig={apiConfig} wantedTorrentStates={[ApiTorrentState.Seeding]} />
+          }
+          {currentTabIndex === 3 &&
+            <TrackerList apiConfig={apiConfig} />
+          }
+          {currentTabIndex === 4 &&
             <>TODO</>
           }
         </Box>

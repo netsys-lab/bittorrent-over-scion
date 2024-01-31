@@ -1,4 +1,13 @@
-import {OverridableStringUnion} from "@mui/types";
+export enum ApiTorrentState {
+  NotStartedYet = 'not_started_yet',
+  Running = 'running',
+  Completed = 'completed',
+  Failed = 'failed',
+  Cancelled = 'cancelled',
+  Seeding = 'seeding',
+}
+
+export const NonSeedingTorrentStates : Array<ApiTorrentState> = [ApiTorrentState.NotStartedYet, ApiTorrentState.Running, ApiTorrentState.Completed, ApiTorrentState.Failed, ApiTorrentState.Cancelled]
 
 export interface ApiFile {
   id: number;
@@ -17,7 +26,7 @@ export interface ApiTorrentMetrics {
 export interface ApiTorrent {
   id: number;
   name: string;
-  state: OverridableStringUnion<'not started yet' | 'running' | 'completed' | 'failed' | 'cancelled' | 'seeding'>;
+  state: ApiTorrentState;
   status: string;
   peer: string;
   seedOnCompletion: boolean;

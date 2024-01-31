@@ -16,7 +16,7 @@ type State int
 
 func (state State) String() string {
 	return [...]string{
-		"not started yet",
+		"not_started_yet",
 		"running",
 		"failed",
 		"completed",
@@ -41,6 +41,15 @@ const (
 	StateFinishedCancelled          = 4
 	StateSeeding                    = 5
 )
+
+var StringToState = map[string]State{
+	"not_started_yet": StateNotStartedYet,
+	"running":         StateRunning,
+	"failed":          StateFinishedFailed,
+	"completed":       StateFinishedSuccessfully,
+	"cancelled":       StateFinishedCancelled,
+	"seeding":         StateSeeding,
+}
 
 type File struct {
 	ID        uint64 `gorm:"primaryKey" json:"id"`

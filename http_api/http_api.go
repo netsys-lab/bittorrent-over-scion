@@ -55,7 +55,37 @@ func getInfoHandler(w http.ResponseWriter, _ *http.Request, _ httprouter.Params)
 
 func listTorrentsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	api := r.Context().Value("api").(*HttpApi)
-	defaultHandler(w, api.torrents)
+	torrents := make(map[uint64]*storage.Torrent)
+
+	wantedStates := make([]storage.State, 0)
+	wantedStatesStr := r.URL.Query().Get("wantedStates")
+	if len(wantedStatesStr) > 0 {
+		wantedStatesStrs := strings.Split(wantedStatesStr, ",")
+		for _, wantedStateStr := range wantedStatesStrs {
+			wantedState, ok := storage.StringToState[wantedStateStr]
+			if !ok {
+				errorHandler(w, http.StatusBadRequest, "invalid wanted state specified")
+				return
+			}
+			wantedStates = append(wantedStates, wantedState)
+		}
+
+		// filter wanted states
+		for torrentId, torrent := range api.torrents {
+			for _, wantedState := range wantedStates {
+				if wantedState == torrent.State {
+					torrents[torrentId] = torrent
+					break
+				}
+			}
+		}
+	} else {
+		for torrentId, torrent := range api.torrents {
+			torrents[torrentId] = torrent
+		}
+	}
+
+	defaultHandler(w, torrents)
 }
 
 func listTrackersHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
