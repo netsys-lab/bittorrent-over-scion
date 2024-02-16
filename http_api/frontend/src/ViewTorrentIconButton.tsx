@@ -13,6 +13,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import DownloadIcon from "@mui/icons-material/Download";
 import CircularProgressWithLabel from "./CircularProgressWithLabel.tsx";
 import { ApiTorrent, ApiFile } from './types.tsx';
+import {filesize} from "filesize";
 
 interface ViewTorrentIconButtonProps {
   apiConfig: ApiConfig,
@@ -82,7 +83,7 @@ export default function ViewTorrentIconButton({apiConfig, torrent} : ViewTorrent
                 <TableBody>
                   <TableRow>
                     <TableCell component="th" variant="head" scope="row" sx={{ fontWeight: "bold" }}>Piece Length</TableCell>
-                    <TableCell align="right">{torrent.pieceLength} B</TableCell>
+                    <TableCell align="right">{filesize(torrent.pieceLength, {bits: false})}</TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell component="th" variant="head" scope="row" sx={{ fontWeight: "bold" }}>Number of Pieces</TableCell>
@@ -125,7 +126,7 @@ export default function ViewTorrentIconButton({apiConfig, torrent} : ViewTorrent
                     >
                       <Stack direction="row" alignItems="center" spacing={1}>
                         <CircularProgressWithLabel variant="determinate" label={`${Math.round(progress)}%`} value={progress} color="primary" />
-                        <ListItemText primary={file.path} secondary={`${file.progress}/${file.length} bytes`} />
+                        <ListItemText primary={file.path} secondary={`${filesize(file.progress, {bits: false})} / ${filesize(file.length, {bits: false})}`} />
                       </Stack>
                     </ListItem>
                   );
