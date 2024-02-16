@@ -28,7 +28,7 @@ export interface ApiTorrent {
   name: string;
   state: ApiTorrentState;
   status: string;
-  peer: string;
+  peers: Array<string>;
   seedOnCompletion: boolean;
   seedPort: number;
   enableDht: boolean;

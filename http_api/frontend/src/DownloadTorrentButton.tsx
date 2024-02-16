@@ -22,7 +22,7 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
 
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [peer, setPeer] = useState("");
+  const [peers, setPeers] = useState(new Array<string>());
   const [seedOnCompletion, setSeedOnCompletion] = useState(false);
   const [seedPort, setSeedPort] = useState<number | null>(null);
   const [enableDht, setEnableDht] = useState(false);
@@ -31,7 +31,7 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
 
   const clearFields = () => {
     setFile(null);
-    setPeer("");
+    setPeers(new Array<string>());
     setSeedOnCompletion(false);
     setSeedPort(null);
     setEnableDht(false);
@@ -44,13 +44,15 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
       setError("Torrent file needs to be selected!");
       return;
     }
-    if (peer.length == 0) {
+    if (peers.length == 0) {
       setError("Peer field needs to be filled out!");
       return;
     }
 
     const formData = new FormData();
-    formData.append("peer", peer);
+    for (let i = 0; i < peers.length; ++i) {
+      formData.append(`peers`, peers[i]);
+    }
     formData.append("seedOnCompletion", seedOnCompletion ? "1" : "0");
     formData.append("seedPort", seedPort != null ? seedPort.toString() : "0");
     formData.append("enableDht", enableDht ? "1" : "0");
@@ -141,19 +143,21 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
               }}
             />
           } label="Use trackers for peer discovery" />
-          <Tooltip title="Comma-separated addresses of peers that will be used in addition to DHT and trackers">
+          <Tooltip title="Addresses of peers that will be used in addition to DHT and trackers">
             <TextField
               label="Additional peer addresses"
               type="text"
-              placeholder="19-ffaa:1:106d,[127.0.0.1]:43000,17-ffaa:0:cafd,[127.0.0.1]:43000"
+              placeholder="19-ffaa:1:106d,[127.0.0.1]:43000&#10;17-ffaa:0:cafd,[127.0.0.1]:43000"
               margin="normal"
               InputLabelProps={{
                 shrink: true
               }}
-              value={peer}
+              value={peers.join("\n")}
               onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setPeer(event.target.value);
+                setPeers(event.target.value.split("\n"));
               }}
+              multiline
+              rows={4}
               fullWidth
             />
           </Tooltip>

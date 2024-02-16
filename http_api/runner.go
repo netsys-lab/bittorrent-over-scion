@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
-	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/server"
 	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
@@ -84,8 +83,9 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 	}
 
 	// configure peer discovery
+	//TODO actually implement DHT communication
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
-	peerDiscoveryConfig.EnableDht = api.EnableDht
+	peerDiscoveryConfig.EnableDht = torrent.EnableDht
 
 	// generate random peer ID
 	var peerID [20]byte
@@ -95,22 +95,8 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 		return
 	}
 
-	// make target peers
-	//TODO allow multiple peers
-	targetPeers := peers.NewPeerSet(0)
-	_, err = snet.ParseUDPAddr(torrent.Peer)
-	if err != nil {
-		torrent.SaveState(api.Storage.DB, storage.StateFinishedFailed, err.Error())
-		return
-	}
-	p := peers.Peer{
-		Addr:  torrent.Peer,
-		Index: 0,
-	}
-	targetPeers.Add(p)
-
 	torrent.P2pTorrent = &p2p.Torrent{
-		PeerSet:                     targetPeers,
+		PeerSet:                     torrent.PeerSet,
 		PeerID:                      peerID,
 		InfoHash:                    torrent.TorrentFile.InfoHash,
 		PieceHashes:                 torrent.TorrentFile.PieceHashes,

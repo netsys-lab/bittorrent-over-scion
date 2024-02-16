@@ -9,6 +9,7 @@ import (
 	util "github.com/netsys-lab/bittorrent-over-scion/Utils"
 	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
+	peers2 "github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	"github.com/scionproto/scion/go/lib/snet"
 	"io"
@@ -265,6 +266,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	torrent := &storage.Torrent{
 		// persisted in database
 		FriendlyName:     remoteFileHdr.Filename,
+		Peers:            make([]storage.Peer, 0),
 		State:            storage.StateNotStartedYet,
 		SeedOnCompletion: seedOnCompletionBool,
 		SeedPort:         uint16(seedPortNum),
@@ -275,6 +277,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		// only in-memory
 		Metrics:     &storage.TorrentMetrics{},
 		TorrentFile: &torrentFile,
+		PeerSet:     peers2.NewPeerSet(0),
 	}
 
 	// add files to the torrent representation (potentially saving files to disk will be done later because we need torrent ID autoincrement from database)
@@ -299,11 +302,31 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	}
 
 	// peer only needed when there is anything to download basically
-	torrent.Peer = r.FormValue("peer")
+	peers := r.Form["peers"]
 	//TODO consideration of partial downloads in multiple files are supported in future
-	if len(remoteFileHdrs) == 0 && len(torrent.Peer) == 0 {
-		errorHandler(w, http.StatusBadRequest, "field \"peer\" as part of POST form data is missing (or upload all files instead)")
-		return
+	//TODO once DHT & trackers are supported, empty peers should be made possible
+	if len(peers) == 0 || len(peers[0]) == 0 {
+		if len(remoteFileHdrs) == 0 {
+			errorHandler(w, http.StatusBadRequest, "field \"peers\" as part of POST form data is missing (or upload all files instead)")
+			return
+		}
+	}
+	for i := 0; i < len(peers); i++ {
+		peer := peers[i]
+
+		_, err = snet.ParseUDPAddr(peer)
+		if err != nil {
+			errorHandler(w, http.StatusBadRequest, fmt.Sprintf("field \"peers\" no. %d is not a valid SCION address", i))
+			return
+		}
+
+		torrent.Peers = append(torrent.Peers, storage.Peer{Address: peer})
+
+		p := peers2.Peer{
+			Addr:  peer,
+			Index: i,
+		}
+		torrent.PeerSet.Add(p)
 	}
 
 	// put it in database

@@ -44,6 +44,7 @@ func (s *Storage) Init(dsn string) error {
 	err = s.DB.AutoMigrate(
 		&Torrent{},
 		&File{},
+		&Peer{},
 		&Tracker{},
 	)
 	if err != nil {

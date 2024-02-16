@@ -67,13 +67,14 @@ export default function ViewTorrentIconButton({apiConfig, torrent} : ViewTorrent
               <TextField
                 label="Additional peer addresses"
                 type="text"
-                placeholder="19-ffaa:1:106d,[127.0.0.1]:43000,17-ffaa:0:cafd,[127.0.0.1]:43000"
+                placeholder="19-ffaa:1:106d,[127.0.0.1]:43000&#10;17-ffaa:0:cafd,[127.0.0.1]:43000"
                 margin="normal"
                 InputLabelProps={{
                   shrink: true
                 }}
-                value={torrent.peer}
+                value={torrent.peers.join("\n")}
                 fullWidth
+                multiline
                 disabled
               />
             </Tooltip>

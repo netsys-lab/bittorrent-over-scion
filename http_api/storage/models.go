@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
+	"github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -66,6 +67,17 @@ type Tracker struct {
 	URL string `gorm:"uniqueIndex" json:"url"`
 }
 
+type Peer struct {
+	ID        uint64 `gorm:"primaryKey"`
+	TorrentID uint64
+
+	Address string
+}
+
+func (peer *Peer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(peer.Address)
+}
+
 type TorrentMetrics struct {
 	ReadBandwidth    int64 `json:"rx"`
 	WrittenBandwidth int64 `json:"tx"`
@@ -83,7 +95,7 @@ type Torrent struct {
 
 	// own attributes
 	FriendlyName     string `json:"name"`
-	Peer             string `json:"peer"`
+	Peers            []Peer `json:"peers"`
 	SeedOnCompletion bool   `json:"seedOnCompletion"`
 	SeedPort         uint16 `json:"seedPort"`
 	EnableDht        bool   `json:"enableDht"`
@@ -99,6 +111,7 @@ type Torrent struct {
 	P2pTorrent  *p2p.Torrent             `gorm:"-" json:"-"`
 	CancelFunc  *context.CancelFunc      `gorm:"-" json:"-"`
 	SeedAddr    string                   `gorm:"-" json:"seedAddr"`
+	PeerSet     peers.PeerSet            `gorm:"-" json:"-"`
 }
 
 func (torrent *Torrent) MarshalJSON() ([]byte, error) {
