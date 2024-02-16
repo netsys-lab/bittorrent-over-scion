@@ -31,6 +31,8 @@ export interface ApiTorrent {
   peer: string;
   seedOnCompletion: boolean;
   seedPort: number;
+  enableDht: boolean;
+  enableTrackers: boolean;
   seedAddr: string;
   files: Array<ApiFile>;
   metrics: ApiTorrentMetrics;

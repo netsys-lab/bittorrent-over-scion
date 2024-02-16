@@ -6,8 +6,8 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
-  FormControlLabel,
+  DialogTitle, Divider,
+  FormControlLabel, Switch,
   TextField
 } from '@mui/material';
 import { MuiFileInput } from 'mui-file-input';
@@ -26,6 +26,8 @@ export default function SeedTorrentButton({apiConfig} : SeedTorrentButtonProps) 
   const [localFile, setLocalFile] = useState<File | null>(null);
   const [seedImmediately, setSeedImmediately] = useState(true);
   const [seedPort, setSeedPort] = useState<number | string>("");
+  const [enableDht, setEnableDht] = useState(false);
+  const [enableTrackers, setEnableTrackers] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearFields = () => {
@@ -33,6 +35,8 @@ export default function SeedTorrentButton({apiConfig} : SeedTorrentButtonProps) 
     setLocalFile(null);
     setSeedImmediately(true);
     setSeedPort("");
+    setEnableDht(false);
+    setEnableTrackers(false);
     setError(null);
   };
 
@@ -50,6 +54,8 @@ export default function SeedTorrentButton({apiConfig} : SeedTorrentButtonProps) 
     const formData = new FormData();
     formData.append("seedOnCompletion", seedImmediately ? "1" : "0");
     formData.append("seedPort", seedPort ? seedPort.toString() : "0")
+    formData.append("enableDht", enableDht ? "1" : "0");
+    formData.append("enableTrackers", enableTrackers ? "1" : "0");
     formData.append("torrentFile", torrentFile!!);
     formData.append("files", localFile!!);
 
@@ -125,6 +131,23 @@ export default function SeedTorrentButton({apiConfig} : SeedTorrentButtonProps) 
             }
           }}
           fullWidth />
+          <Divider textAlign="left">Peer Discovery</Divider>
+          <FormControlLabel control={
+            <Switch
+              checked={enableDht}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setEnableDht(event.currentTarget.checked);
+              }}
+            />
+          } label="Use DHT for peer discovery" />
+          <FormControlLabel control={
+            <Switch
+              checked={enableTrackers}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setEnableTrackers(event.currentTarget.checked);
+              }}
+            />
+          } label="Use trackers for peer discovery" />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>

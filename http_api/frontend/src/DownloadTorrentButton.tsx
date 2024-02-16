@@ -1,14 +1,13 @@
 import {useState, ChangeEvent} from 'react';
 import {
   Alert,
-  Button,
-  Checkbox,
+  Button, Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  TextField
+  DialogTitle, Divider,
+  FormControlLabel, Switch,
+  TextField, Tooltip
 } from '@mui/material';
 import { MuiFileInput } from 'mui-file-input';
 import { useSnackbar } from 'notistack';
@@ -26,6 +25,8 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
   const [peer, setPeer] = useState("");
   const [seedOnCompletion, setSeedOnCompletion] = useState(false);
   const [seedPort, setSeedPort] = useState<number | null>(null);
+  const [enableDht, setEnableDht] = useState(false);
+  const [enableTrackers, setEnableTrackers] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearFields = () => {
@@ -33,6 +34,8 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
     setPeer("");
     setSeedOnCompletion(false);
     setSeedPort(null);
+    setEnableDht(false);
+    setEnableTrackers(false);
     setError(null);
   };
 
@@ -49,7 +52,9 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
     const formData = new FormData();
     formData.append("peer", peer);
     formData.append("seedOnCompletion", seedOnCompletion ? "1" : "0");
-    formData.append("seedPort", seedPort != null ? seedPort.toString() : "0")
+    formData.append("seedPort", seedPort != null ? seedPort.toString() : "0");
+    formData.append("enableDht", enableDht ? "1" : "0");
+    formData.append("enableTrackers", enableTrackers ? "1" : "0");
     formData.append("torrentFile", file!!);
 
     try {
@@ -93,24 +98,9 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
             fullWidth
             required
           />
-          <TextField
-            label="Remote Peer"
-            type="text"
-            placeholder="19-ffaa:1:106d,[127.0.0.1]:43000"
-            margin="normal"
-            InputLabelProps={{
-              shrink: true
-            }}
-            value={peer}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => {
-              setPeer(event.target.value);
-            }}
-            fullWidth
-            required
-          />
           <FormControlLabel control={
             <Checkbox
-              value={seedOnCompletion}
+              checked={seedOnCompletion}
               onChange={(event: ChangeEvent<HTMLInputElement>) => {
                setSeedOnCompletion(event.currentTarget.checked);
               }}
@@ -134,6 +124,39 @@ export default function DownloadTorrentButton({apiConfig} : DownloadTorrentButto
               }
             }}
             fullWidth />}
+          <Divider textAlign="left">Peer Discovery</Divider>
+          <FormControlLabel control={
+            <Switch
+              checked={enableDht}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setEnableDht(event.currentTarget.checked);
+              }}
+            />
+          } label="Use DHT for peer discovery" />
+          <FormControlLabel control={
+            <Switch
+              checked={enableTrackers}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setEnableTrackers(event.currentTarget.checked);
+              }}
+            />
+          } label="Use trackers for peer discovery" />
+          <Tooltip title="Comma-separated addresses of peers that will be used in addition to DHT and trackers">
+            <TextField
+              label="Additional peer addresses"
+              type="text"
+              placeholder="19-ffaa:1:106d,[127.0.0.1]:43000,17-ffaa:0:cafd,[127.0.0.1]:43000"
+              margin="normal"
+              InputLabelProps={{
+                shrink: true
+              }}
+              value={peer}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setPeer(event.target.value);
+              }}
+              fullWidth
+            />
+          </Tooltip>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>

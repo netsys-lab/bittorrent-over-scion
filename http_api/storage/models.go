@@ -86,6 +86,8 @@ type Torrent struct {
 	Peer             string `json:"peer"`
 	SeedOnCompletion bool   `json:"seedOnCompletion"`
 	SeedPort         uint16 `json:"seedPort"`
+	EnableDht        bool   `json:"enableDht"`
+	EnableTrackers   bool   `json:"enableTrackers"`
 	State            State  `json:"-"`
 	Status           string `json:"status"`
 	Files            []File `json:"files"`

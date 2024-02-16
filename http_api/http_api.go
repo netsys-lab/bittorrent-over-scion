@@ -210,6 +210,26 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		}
 	}
 
+	enableDhtStr := r.FormValue("enableDht")
+	enableDhtBool := false
+	if len(enableDhtStr) > 0 {
+		enableDhtBool, err = strconv.ParseBool(enableDhtStr)
+		if err != nil {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"enableDht\" specified (boolean wanted)")
+			return
+		}
+	}
+
+	enableTrackersStr := r.FormValue("enableTrackers")
+	enableTrackersBool := false
+	if len(enableTrackersStr) > 0 {
+		enableTrackersBool, err = strconv.ParseBool(enableTrackersStr)
+		if err != nil {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"enableTrackers\" specified (boolean wanted)")
+			return
+		}
+	}
+
 	/* handle uploaded torrent file */
 
 	file, remoteFileHdr, err := r.FormFile("torrentFile")
@@ -248,6 +268,8 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		State:            storage.StateNotStartedYet,
 		SeedOnCompletion: seedOnCompletionBool,
 		SeedPort:         uint16(seedPortNum),
+		EnableDht:        enableDhtBool,
+		EnableTrackers:   enableTrackersBool,
 		RawTorrentFile:   fileBuf,
 
 		// only in-memory
