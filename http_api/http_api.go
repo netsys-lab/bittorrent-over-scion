@@ -17,7 +17,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -653,6 +655,25 @@ func errorHandler(w http.ResponseWriter, status int, message string) {
 	}
 }
 
+// https://stackoverflow.com/questions/39320371/how-start-web-server-to-open-page-in-browser-in-golang
+// open opens the specified URL in the default browser of the user
+func open(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	case "darwin":
+		cmd = "open"
+	default: // "linux", "freebsd", "openbsd", "netbsd"
+		cmd = "xdg-open"
+	}
+	args = append(args, url)
+	return exec.Command(cmd, args...).Start()
+}
+
 func (api *HttpApi) LoadFromStorage() error {
 	api.torrents = make(map[uint64]*storage.Torrent)
 	api.trackers = make(map[uint64]*storage.Tracker)
@@ -707,6 +728,17 @@ func (api *HttpApi) ListenAndServe() error {
 		},
 	}
 
-	log.Infof("[HTTP API] Listening on %s, frontend available at: http://%s/frontend", api.LocalAddr, api.LocalAddr)
+	frontendAddr := fmt.Sprintf("http://%s/frontend", api.LocalAddr)
+	if strings.Contains(frontendAddr, "0.0.0.0") {
+		frontendAddr = strings.Replace(frontendAddr, "0.0.0.0", "127.0.0.1", -1)
+	} else if strings.Contains(frontendAddr, "[::]") {
+		frontendAddr = strings.Replace(frontendAddr, "[::]", "[::1]", -1)
+	}
+	log.Infof("[HTTP API] Listening on %s, frontend available at: %s", api.LocalAddr, frontendAddr)
+	err = open(frontendAddr)
+	if err == nil {
+		log.Infof("[HTTP API] Opened frontend in your browser!")
+	}
+
 	return server.ListenAndServe()
 }
