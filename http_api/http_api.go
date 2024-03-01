@@ -398,7 +398,6 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		ctx, cancel := context.WithCancel(context.Background())
 		go api.RunLeecher(ctx, torrent)
 		torrent.CancelFunc = &cancel
-		//TODO make cancellation actually possible
 	} else {
 		// mark torrent as finished
 		//TODO when multiple files are supported, this is not necessarily true when only partial files where provided
@@ -478,19 +477,37 @@ func updateTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 	action := r.FormValue("action")
 	if len(action) > 0 {
 		if action == "cancel" {
-			if torrent.State == storage.StateRunning {
-				(*torrent.CancelFunc)()
-
-				w.WriteHeader(http.StatusOK)
-				defaultHandler(w, torrent)
-			} else {
+			if torrent.State != storage.StateRunning {
 				errorHandler(w, http.StatusBadRequest, "torrent must be running to cancel it")
+				return
 			}
-		} else {
-			errorHandler(w, http.StatusBadRequest, "invalid value for field \"action\" (must be one of the following: 'cancel')")
+
+			(*torrent.CancelFunc)()
+			torrent.CancelFunc = nil
+
+			w.WriteHeader(http.StatusOK)
+			defaultHandler(w, torrent)
+			return
+		} else if action == "retry" {
+			if !torrent.State.IsFinished() {
+				errorHandler(w, http.StatusBadRequest, "torrent must be finished to retry it")
+				return
+			}
+
+			if torrent.CancelFunc != nil {
+				(*torrent.CancelFunc)()
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			go api.RunLeecher(ctx, torrent)
+			torrent.CancelFunc = &cancel
+
+			w.WriteHeader(http.StatusOK)
+			defaultHandler(w, torrent)
+			return
 		}
 
-		// no save needed, the cancellation will handle saving state, hopefully
+		errorHandler(w, http.StatusBadRequest, "invalid value for field \"action\" (must be one of the following: 'cancel')")
 		return
 	}
 
@@ -509,6 +526,7 @@ func updateTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 			torrent.CancelFunc = &cancel
 		} else if !seedOnCompletionBool && torrent.State == storage.StateSeeding && torrent.CancelFunc != nil {
 			(*torrent.CancelFunc)()
+			torrent.CancelFunc = nil
 		}
 
 		torrent.SeedOnCompletion = seedOnCompletionBool
@@ -555,8 +573,9 @@ func deleteTorrentByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 	}
 
 	// stop seeder if not yet done
-	if torrent.State == storage.StateSeeding && torrent.CancelFunc != nil {
+	if torrent.CancelFunc != nil {
 		(*torrent.CancelFunc)()
+		torrent.CancelFunc = nil
 	}
 
 	// delete files associated to the torrent

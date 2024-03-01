@@ -25,6 +25,7 @@ import CircularProgressWithLabel from "./CircularProgressWithLabel.tsx";
 import SeedSwitch from "./SeedSwitch.tsx";
 import SeedTorrentButton from "./SeedTorrentButton.tsx";
 import CancelTorrentIconButton from "./CancelTorrentIconButton.tsx";
+import RetryTorrentIconButton from "./RetryTorrentIconButton.tsx";
 
 interface TorrentListProps {
   apiConfig: ApiConfig
@@ -95,6 +96,7 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                 let seedSwitch = <></>;
                 let cancelButton = <></>;
                 let downloadButton = <></>;
+                let retryButton = <></>;
                 let deleteButton = <></>;
                 let progress = <></>;
 
@@ -168,6 +170,10 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
 
                 if (torrent.state != ApiTorrentState.Seeding) {
                   progress = <CircularProgressWithLabel variant="determinate" label={`${Math.round(progressValue)}%`} value={progressValue} color={progressColor} />;
+
+                  if (finished && torrent.state != ApiTorrentState.Completed) {
+                    retryButton = <RetryTorrentIconButton apiConfig={this.props.apiConfig} torrentId={torrentId} />;
+                  }
                 }
 
                 if (torrent.state == ApiTorrentState.Seeding || torrent.state == ApiTorrentState.Completed) {
@@ -190,6 +196,7 @@ export default class TorrentList extends Component<TorrentListProps, TorrentList
                         <ViewTorrentIconButton apiConfig={this.props.apiConfig} torrent={torrent} />
                         {downloadButton}
                         {cancelButton}
+                        {retryButton}
                         {deleteButton}
                       </Stack>
                     }
