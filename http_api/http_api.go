@@ -31,15 +31,15 @@ import (
 )
 
 type HttpApi struct {
-	LocalAddr          string
-	MaxRequestBodySize int
-	ScionLocalHost     string
-	NumPaths           int
-	DialBackStartPort  uint16
-	SeedStartPort      uint16
-	EnableDht          bool
-	DhtPort            uint16
-	DhtBootstrapNodes  []dht.Addr
+	HttpBindAddr           string
+	HttpMaxRequestBodySize int
+	ScionLocalHost         string
+	NumPaths               int
+	DialBackStartPort      uint16
+	SeedStartPort          uint16
+	EnableDht              bool
+	DhtPort                uint16
+	DhtBootstrapNodes      []dht.Addr
 
 	Storage *storage.Storage
 
@@ -182,10 +182,10 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 	api := r.Context().Value("api").(*HttpApi)
 
 	// limit request body (torrent file)
-	r.Body = http.MaxBytesReader(w, r.Body, int64(api.MaxRequestBodySize))
-	err := r.ParseMultipartForm(int64(api.MaxRequestBodySize))
+	r.Body = http.MaxBytesReader(w, r.Body, int64(api.HttpMaxRequestBodySize))
+	err := r.ParseMultipartForm(int64(api.HttpMaxRequestBodySize))
 	if err != nil {
-		errorHandler(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body too large (maximum %d bytes)", api.MaxRequestBodySize))
+		errorHandler(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body too large (maximum %d bytes)", api.HttpMaxRequestBodySize))
 		return
 	}
 
@@ -278,7 +278,6 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		RawTorrentFile:   fileBuf,
 
 		// only in-memory
-		Metrics:     &storage.TorrentMetrics{},
 		TorrentFile: &torrentFile,
 		PeerSet:     peers2.NewPeerSet(0),
 	}
@@ -314,9 +313,7 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 			return
 		}
 	}
-	for i := 0; i < len(peers); i++ {
-		peer := peers[i]
-
+	for i, peer := range peers {
 		_, err = snet.ParseUDPAddr(peer)
 		if err != nil {
 			errorHandler(w, http.StatusBadRequest, fmt.Sprintf("field \"peers\" no. %d is not a valid SCION address", i))
@@ -324,13 +321,8 @@ func addTorrentHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		}
 
 		torrent.Peers = append(torrent.Peers, storage.Peer{Address: peer})
-
-		p := peers2.Peer{
-			Addr:  peer,
-			Index: i,
-		}
-		torrent.PeerSet.Add(p)
 	}
+	torrent.ApplyPeers(torrent.Peers)
 
 	// put it in database
 	result := api.Storage.DB.Save(torrent)
@@ -723,9 +715,69 @@ func open(url string) error {
 	return exec.Command(cmd, args...).Start()
 }
 
-func (api *HttpApi) LoadFromStorage() error {
+func (api *HttpApi) Init() error {
+	api.usedUdpPorts = make(map[uint16]bool)
 	api.torrents = make(map[uint64]*storage.Torrent)
 	api.trackers = make(map[uint64]*storage.Tracker)
+
+	// resolve local SCION address
+	var err error
+	if api.ScionLocalHost != "" {
+		api.localAddr, err = snet.ParseUDPAddr(api.ScionLocalHost)
+	} else {
+		api.localAddr, err = util.GetDefaultLocalAddrWithoutPort()
+	}
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	return nil
+}
+
+func (api *HttpApi) LoadFromStorage() error {
+	var torrents []*storage.Torrent
+	result := api.Storage.DB.Preload("Peers").Preload("Files").Find(&torrents)
+	if result.Error != nil {
+		log.Error("[HTTP API] Could not query torrents from database!")
+		return result.Error
+	}
+	for _, torrent := range torrents {
+		// parse torrent file
+		torrentFile, err := torrentfile.Parse(bytes.NewReader(torrent.RawTorrentFile))
+		if err != nil {
+			log.Errorf("[HTTP API] Could not parse torrent file of torrent with id %d!", torrent.ID)
+			return err
+		}
+		torrent.TorrentFile = &torrentFile
+		log.Debugf("TorrentFile{Announce: \"%s\", Length: %d, Name: \"%s\", PieceLength: %d}", torrentFile.Announce, torrentFile.Length, torrentFile.Name, torrentFile.PieceLength)
+
+		// generate peer set
+		torrent.ApplyPeers(torrent.Peers)
+
+		// store in memory
+		api.torrents[torrent.ID] = torrent
+
+		// if the torrent is not in a finished state, cancel it
+		if !torrent.State.IsFinished() {
+			torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "Cancelled on shutdown")
+		} else if torrent.State == storage.StateSeeding { // if the torrent was seeding, it needs to be started again
+			ctx, cancel := context.WithCancel(context.Background())
+			go api.RunSeeder(ctx, torrent)
+			torrent.CancelFunc = &cancel
+		}
+	}
+
+	var trackers []*storage.Tracker
+	result = api.Storage.DB.Find(&trackers)
+	if result.Error != nil {
+		log.Error("[HTTP API] Could not load trackers from database!")
+		return result.Error
+	}
+	for _, tracker := range trackers {
+		api.trackers[tracker.ID] = tracker
+	}
+
 	return nil
 }
 
@@ -733,20 +785,6 @@ func (api *HttpApi) LoadFromStorage() error {
 var static embed.FS
 
 func (api *HttpApi) ListenAndServe() error {
-	api.usedUdpPorts = make(map[uint16]bool)
-
-	// resolve local SCION address
-	var err error
-	if api.ScionLocalHost != "" {
-		api.localAddr, err = snet.ParseUDPAddr(api.ScionLocalHost)
-	} else {
-		api.localAddr, err = util.GetDefaultLocalAddr() //TODO currently wastes a port
-	}
-	if err != nil {
-		log.Error("[HTTP API] Could not parse local SCION address (specified with -local argument)!")
-		return err
-	}
-
 	frontend, err := fs.Sub(static, "frontend/dist")
 	if err != nil {
 		log.Error("[HTTP API] Could not load static assets!")
@@ -770,7 +808,7 @@ func (api *HttpApi) ListenAndServe() error {
 	router.ServeFiles("/frontend/*filepath", http.FS(frontend))
 
 	server := &http.Server{
-		Addr: api.LocalAddr,
+		Addr: api.HttpBindAddr,
 		Handler: cors.New(cors.Options{
 			AllowedMethods: []string{"GET", "POST", "DELETE", "OPTIONS"},
 		}).Handler(router),
@@ -779,13 +817,13 @@ func (api *HttpApi) ListenAndServe() error {
 		},
 	}
 
-	frontendAddr := fmt.Sprintf("http://%s/frontend", api.LocalAddr)
+	frontendAddr := fmt.Sprintf("http://%s/frontend", api.HttpBindAddr)
 	if strings.Contains(frontendAddr, "0.0.0.0") {
 		frontendAddr = strings.Replace(frontendAddr, "0.0.0.0", "127.0.0.1", -1)
 	} else if strings.Contains(frontendAddr, "[::]") {
 		frontendAddr = strings.Replace(frontendAddr, "[::]", "[::1]", -1)
 	}
-	log.Infof("[HTTP API] Listening on %s, frontend available at: %s", api.LocalAddr, frontendAddr)
+	log.Infof("[HTTP API] Listening on %s, frontend available at: %s", api.HttpBindAddr, frontendAddr)
 	err = open(frontendAddr)
 	if err == nil {
 		log.Infof("[HTTP API] Opened frontend in your browser!")

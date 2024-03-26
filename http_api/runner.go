@@ -109,6 +109,8 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 	}
 
 	if peerDiscoveryConfig.EnableDht {
+		//TODO what exactly is happening here? what is the peer port used for in comparison with the port that exists in node address?
+		// I cannot make sense of it currently so DHT will probably not work out of the box.
 		peerAddr, err := snet.ParseUDPAddr(api.ScionLocalHost)
 		peerPort := uint16(peerAddr.Host.Port)
 		nodeAddr := peerAddr.Copy()
@@ -131,6 +133,7 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 	}
 
 	// start metrics collection for this torrent
+	torrent.Metrics = &storage.TorrentMetrics{}
 	stopMetricsCollection := make(chan bool)
 	go runMetricsCollector(torrent, stopMetricsCollection)
 
@@ -138,7 +141,6 @@ func (api *HttpApi) RunLeecher(ctx context.Context, torrent *storage.Torrent) {
 	//TODO multiple files per torrent
 	buf, err := torrent.P2pTorrent.Download(ctx)
 	stopMetricsCollection <- true
-	time.Sleep(4 * time.Second) // to not have race conditions when writing status
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			torrent.SaveState(api.Storage.DB, storage.StateFinishedCancelled, "")

@@ -15,6 +15,8 @@ import (
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 )
 
 var flags = struct {
@@ -24,7 +26,9 @@ var flags = struct {
 	Seed              bool     `help:"Start BitTorrent in Seeder mode"`
 	File              string   `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
 	Local             string   `help:"Local SCION address of the seeder"`
-	HttpApi           bool     `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
+	HttpApi           bool     `help:"Start HTTP API. This is a special mode, no immediate downloading/seeding of specified file will happen."`
+	HttpApiFileDir    string   `help:"Directory used to store downloaded files or files to seed (default: ~/.bittorrent-over-scion/files). Only for httpApi=true"`
+	HttpApiDbFile     string   `help:"File path where the SQLite database for the HTTP API will be stored (default: ~/.bittorrent-over-scion/bittorrent-over-scion.sqlite3). Only for httpApi=true"`
 	HttpApiAddr       string   `help:"Optional: Configure the IP and port the HTTP API will bind on (default 127.0.0.1:8000). Only for httpApi=true"`
 	HttpApiMaxSize    int      `help:"Optional: Set the maximum size in bytes that is uploadable through HTTP API at once (all files in total, more specifically the maximum request body size, default ~128 MByte). Only for httpApi=true"`
 	SeedStartPort     int      `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
@@ -77,6 +81,7 @@ func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
 
+	// parse bootstrap nodes
 	dhtBootstrapNodes := make([]dht.Addr, len(flags.DhtBootstrapAddr))
 	for i, addr := range flags.DhtBootstrapAddr {
 		udpAddr, err := snet.ParseUDPAddr(addr)
@@ -92,25 +97,58 @@ func main() {
 
 		log.Info("[HTTP API] Initializing storage...")
 		storage_ := &storage.Storage{DbBackend: storage.Sqlite}
-		err := storage_.Init("file::memory:?cache=shared") // in-memory SQLite database
+		if flags.HttpApiFileDir == "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+
+			flags.HttpApiFileDir = filepath.Join(homeDir, ".bittorrent-over-scion")
+			flags.HttpApiFileDir = filepath.Join(flags.HttpApiFileDir, "files")
+		}
+		if flags.HttpApiDbFile == "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+
+			flags.HttpApiDbFile = filepath.Join(homeDir, ".bittorrent-over-scion")
+			err = os.MkdirAll(flags.HttpApiDbFile, os.ModePerm)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			flags.HttpApiDbFile = filepath.Join(flags.HttpApiDbFile, "bittorrent-over-scion.sqlite3")
+		}
+		//err := storage_.Init("file::memory:?cache=shared") // in-memory SQLite database
+		err := storage_.Init(flags.HttpApiFileDir, flags.HttpApiDbFile)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Info("[HTTP API] Initializing HTTP API...")
+		api := http_api.HttpApi{
+			HttpBindAddr:           flags.HttpApiAddr,
+			HttpMaxRequestBodySize: flags.HttpApiMaxSize,
+			EnableDht:              flags.EnableDht, //TODO make this configurable per torrent?
+			DhtPort:                uint16(flags.DhtPort),
+			DhtBootstrapNodes:      dhtBootstrapNodes,
+			ScionLocalHost:         flags.Local,
+			NumPaths:               flags.NumPaths,
+			DialBackStartPort:      uint16(flags.DialBackStartPort),
+			SeedStartPort:          uint16(flags.SeedStartPort),
+			Storage:                storage_,
+		}
+		err = api.Init()
 		if err != nil {
 			log.Fatal(err)
 			return
 		}
 
 		log.Info("[HTTP API] Loading existing torrent tasks from storage...")
-		api := http_api.HttpApi{
-			LocalAddr:          flags.HttpApiAddr,
-			MaxRequestBodySize: flags.HttpApiMaxSize,
-			EnableDht:          flags.EnableDht, //TODO make this configurable per torrent?
-			DhtPort:            uint16(flags.DhtPort),
-			DhtBootstrapNodes:  dhtBootstrapNodes,
-			ScionLocalHost:     flags.Local,
-			NumPaths:           flags.NumPaths,
-			DialBackStartPort:  uint16(flags.DialBackStartPort),
-			SeedStartPort:      uint16(flags.SeedStartPort),
-			Storage:            storage_,
-		}
 		err = api.LoadFromStorage()
 		if err != nil {
 			log.Fatal(err)

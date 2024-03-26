@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/peers"
+	peers2 "github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -150,4 +151,15 @@ func (torrent *Torrent) SaveState(db *gorm.DB, state State, status string) {
 
 func (torrent *Torrent) GetFileDir(fs *FS) string {
 	return filepath.Join(fs.FileDir, fmt.Sprintf("%d", torrent.ID))
+}
+
+func (torrent *Torrent) ApplyPeers(peers []Peer) {
+	torrent.PeerSet = peers2.NewPeerSet(0)
+	for i, peer := range peers {
+		p := peers2.Peer{
+			Addr:  peer.Address,
+			Index: i,
+		}
+		torrent.PeerSet.Add(p)
+	}
 }

@@ -105,3 +105,23 @@ func GetDefaultLocalAddr() (*snet.UDPAddr, error) {
 	}
 	return sAddr, nil
 }
+
+func GetDefaultLocalAddrWithoutPort() (*snet.UDPAddr, error) {
+	netAddr, err := GetLocalHost()
+	if err != nil {
+		return nil, err
+	}
+	sciondConn, err := findSciond(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	localIA, err := sciondConn.LocalIA(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	sAddr := &snet.UDPAddr{
+		IA:   localIA,
+		Host: netAddr,
+	}
+	return sAddr, nil
+}
