@@ -26,4 +26,7 @@ export default class ApiConfig {
         }
         return str;
     }
+    public settingsEndpoint = () => {
+        return this.apiEndpoint() + "/settings";
+    }
 }

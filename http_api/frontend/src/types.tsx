@@ -53,3 +53,8 @@ export interface ApiTracker {
 export interface ApiTrackers {
   [key: number]: ApiTracker;
 }
+
+export interface ApiSettings {
+  dhtPort: number;
+  dhtBootstrapNodes: Array<string>;
+}

@@ -18,24 +18,24 @@ import (
 )
 
 var flags = struct {
-	InPath            string `help:"Path to torrent file that should be processed"`
-	OutPath           string `help:"Path where BitTorrent writes the downloaded file"`
-	Peer              string `help:"Remote SCION address"`
-	Seed              bool   `help:"Start BitTorrent in Seeder mode"`
-	File              string `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
-	Local             string `help:"Local SCION address of the seeder"`
-	HttpApi           bool   `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
-	HttpApiAddr       string `help:"Optional: Configure the IP and port the HTTP API will bind on (default 127.0.0.1:8000). Only for httpApi=true"`
-	HttpApiMaxSize    int    `help:"Optional: Set the maximum size in bytes that is uploadable through HTTP API at once (all files in total, more specifically the maximum request body size, default ~128 MByte). Only for httpApi=true"`
-	SeedStartPort     int    `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
-	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
-	DialBackStartPort int    `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
-	LogLevel          string `help:"Optional: Change log level"`
-	EnableDht         bool   `help:"Optional: Run a dht network to announce peers"`
-	DhtPort           int    `help:"Optional: Configure the port to run the dht network"`
-	DhtBootstrapAddr  string `help:"Optional: SCION address of the dht network"`
-	PrintMetrics      bool   `help:"Optional: Display per-path metrics at the end of the download. Only for seed=false"`
-	ExportMetricsTo   string `help:"Optional: Export per-path metrics to a particular target, at the moment a csv file (e.g. /tmp/metrics.csv)"`
+	InPath            string   `help:"Path to torrent file that should be processed"`
+	OutPath           string   `help:"Path where BitTorrent writes the downloaded file"`
+	Peer              string   `help:"Remote SCION address"`
+	Seed              bool     `help:"Start BitTorrent in Seeder mode"`
+	File              string   `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
+	Local             string   `help:"Local SCION address of the seeder"`
+	HttpApi           bool     `help:"Start HTTP API. This is a special mode, no direct downloading/seeding of specified file will happen."`
+	HttpApiAddr       string   `help:"Optional: Configure the IP and port the HTTP API will bind on (default 127.0.0.1:8000). Only for httpApi=true"`
+	HttpApiMaxSize    int      `help:"Optional: Set the maximum size in bytes that is uploadable through HTTP API at once (all files in total, more specifically the maximum request body size, default ~128 MByte). Only for httpApi=true"`
+	SeedStartPort     int      `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
+	NumPaths          int      `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
+	DialBackStartPort int      `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
+	LogLevel          string   `help:"Optional: Change log level"`
+	EnableDht         bool     `help:"Optional: Run a dht network to announce peers"`
+	DhtPort           int      `help:"Optional: Configure the port to run the dht network"`
+	DhtBootstrapAddr  []string `help:"Optional: SCION address(es) of the dht network"`
+	PrintMetrics      bool     `help:"Optional: Display per-path metrics at the end of the download. Only for seed=false"`
+	ExportMetricsTo   string   `help:"Optional: Export per-path metrics to a particular target, at the moment a csv file (e.g. /tmp/metrics.csv)"`
 }{
 	Seed:              false,
 	HttpApi:           false,
@@ -77,6 +77,16 @@ func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
 
+	dhtBootstrapNodes := make([]dht.Addr, len(flags.DhtBootstrapAddr))
+	for i, addr := range flags.DhtBootstrapAddr {
+		udpAddr, err := snet.ParseUDPAddr(addr)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		dhtBootstrapNodes[i] = dht.NewAddr(*udpAddr)
+	}
+
 	if flags.HttpApi {
 		log.Info("Starting in HTTP API mode...")
 
@@ -94,7 +104,7 @@ func main() {
 			MaxRequestBodySize: flags.HttpApiMaxSize,
 			EnableDht:          flags.EnableDht, //TODO make this configurable per torrent?
 			DhtPort:            uint16(flags.DhtPort),
-			DhtBootstrapAddr:   flags.DhtBootstrapAddr,
+			DhtBootstrapNodes:  dhtBootstrapNodes,
 			ScionLocalHost:     flags.Local,
 			NumPaths:           flags.NumPaths,
 			DialBackStartPort:  uint16(flags.DialBackStartPort),
@@ -118,12 +128,8 @@ func main() {
 	log.Infof("Input %s, Output %s, Peer %s, seed %t, file %s", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
-
 	peerDiscoveryConfig.EnableDht = flags.EnableDht
-	dhtAddr, err := snet.ParseUDPAddr(flags.DhtBootstrapAddr)
-	if err == nil {
-		peerDiscoveryConfig.DhtNodes = []dht.Addr{dht.NewAddr(*dhtAddr)}
-	}
+	peerDiscoveryConfig.DhtNodes = dhtBootstrapNodes
 	if flags.DhtPort > 0 {
 		peerDiscoveryConfig.DhtPort = uint16(flags.DhtPort)
 	}

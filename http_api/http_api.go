@@ -11,6 +11,7 @@ import (
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	peers2 "github.com/netsys-lab/bittorrent-over-scion/peers"
 	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
+	"github.com/netsys-lab/dht"
 	"github.com/scionproto/scion/go/lib/snet"
 	"io"
 	"io/fs"
@@ -38,7 +39,7 @@ type HttpApi struct {
 	SeedStartPort      uint16
 	EnableDht          bool
 	DhtPort            uint16
-	DhtBootstrapAddr   string
+	DhtBootstrapNodes  []dht.Addr
 
 	Storage *storage.Storage
 
@@ -622,6 +623,54 @@ func deleteTrackerByIdHandler(w http.ResponseWriter, r *http.Request, p httprout
 	defaultHandler(w, nil)
 }
 
+func getSettingsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+
+	nodes := make([]string, len(api.DhtBootstrapNodes))
+	for i, node := range api.DhtBootstrapNodes {
+		nodes[i] = node.String()
+	}
+
+	defaultHandler(w, &struct {
+		DhtPort           uint16   `json:"dhtPort"`
+		DhtBootstrapNodes []string `json:"dhtBootstrapNodes"`
+	}{
+		api.DhtPort,
+		nodes,
+	})
+}
+
+func updateSettingsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	api := r.Context().Value("api").(*HttpApi)
+
+	portStr := r.FormValue("dhtPort")
+	if len(portStr) > 0 {
+		port, err := strconv.ParseUint(portStr, 10, 16)
+		if err != nil || port == 0 {
+			errorHandler(w, http.StatusBadRequest, "invalid value for field \"dhtPort\" (must be a valid port number)")
+			return
+		}
+		api.DhtPort = uint16(port)
+	}
+
+	nodes := make([]dht.Addr, 0)
+	nodeStrs := r.Form["dhtBootstrapNodes"]
+	for _, nodeStr := range nodeStrs {
+		if len(nodeStr) == 0 {
+			continue
+		}
+		udpAddr, err := snet.ParseUDPAddr(nodeStr)
+		if err != nil {
+			errorHandler(w, http.StatusBadRequest, "invalid value(s) for field \"dhtBootstrapNodes\" (must be valid SCION address(es))")
+			return
+		}
+		nodes = append(nodes, dht.NewAddr(*udpAddr))
+	}
+	api.DhtBootstrapNodes = nodes
+
+	defaultHandler(w, nil)
+}
+
 func defaultHandler(w http.ResponseWriter, payload interface{}) {
 	str, err := json.Marshal(&payload)
 	if err != nil {
@@ -716,6 +765,8 @@ func (api *HttpApi) ListenAndServe() error {
 	router.POST("/api/tracker", addTrackerHandler)
 	router.DELETE("/api/torrent/:torrent", deleteTorrentByIdHandler)
 	router.DELETE("/api/tracker/:tracker", deleteTrackerByIdHandler)
+	router.GET("/api/settings", getSettingsHandler)
+	router.POST("/api/settings", updateSettingsHandler)
 	router.ServeFiles("/frontend/*filepath", http.FS(frontend))
 
 	server := &http.Server{

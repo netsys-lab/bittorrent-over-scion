@@ -6,7 +6,6 @@ import (
 	"errors"
 	"github.com/netsys-lab/bittorrent-over-scion/p2p"
 	"github.com/netsys-lab/bittorrent-over-scion/server"
-	"github.com/netsys-lab/dht"
 	"github.com/netsys-lab/scion-path-discovery/packets"
 	"github.com/scionproto/scion/go/lib/snet"
 	"io/ioutil"
@@ -201,12 +200,9 @@ func (api *HttpApi) RunSeeder(ctx context.Context, torrent *storage.Torrent) {
 	// configure peer discovery
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
 	peerDiscoveryConfig.EnableDht = api.EnableDht
-	dhtAddr, err := snet.ParseUDPAddr(api.DhtBootstrapAddr)
-	if err == nil {
-		peerDiscoveryConfig.DhtNodes = []dht.Addr{dht.NewAddr(*dhtAddr)}
-	}
+	peerDiscoveryConfig.DhtNodes = api.DhtBootstrapNodes
 	if api.DhtPort > 0 {
-		peerDiscoveryConfig.DhtPort = uint16(api.DhtPort)
+		peerDiscoveryConfig.DhtPort = api.DhtPort
 	}
 
 	// take next automatic port if needed
