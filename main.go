@@ -4,35 +4,48 @@ package main
 // SPDX-License-Identifier: GPL-3.0-only
 
 import (
-	"io/ioutil"
-
+	"context"
 	"github.com/anacrolix/tagflag"
+	"github.com/netsys-lab/bittorrent-over-scion/config"
+	"github.com/netsys-lab/bittorrent-over-scion/http_api"
+	"github.com/netsys-lab/bittorrent-over-scion/http_api/storage"
+	"github.com/netsys-lab/bittorrent-over-scion/server"
+	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
 	"github.com/netsys-lab/dht"
 	"github.com/scionproto/scion/go/lib/snet"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/netsys-lab/bittorrent-over-scion/config"
-	"github.com/netsys-lab/bittorrent-over-scion/server"
-	"github.com/netsys-lab/bittorrent-over-scion/torrentfile"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 )
 
 var flags = struct {
-	InPath            string `help:"Path to torrent file that should be processed"`
-	OutPath           string `help:"Path where BitTorrent writes the downloaded file"`
-	Peer              string `help:"Remote SCION address"`
-	Seed              bool   `help:"Start BitTorrent in Seeder mode"`
-	File              string `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
-	Local             string `help:"Local SCION address of the seeder"`
-	NumPaths          int    `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
-	DialBackStartPort int    `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
-	LogLevel          string `help:"Optional: Change log level"`
-	EnableDht         bool   `help:"Optional: Run a dht network to announce peers"`
-	DhtPort           int    `help:"Optional: Configure the port to run the dht network"`
-	DhtBootstrapAddr  string `help:"Optional: SCION address of the dht network"`
-	PrintMetrics      bool   `help:"Optional: Display per-path metrics at the end of the download. Only for seed=false"`
-	ExportMetricsTo   string `help:"Optional: Export per-path metrics to a particular target, at the moment a csv file (e.g. /tmp/metrics.csv)"`
+	InPath            string   `help:"Path to torrent file that should be processed"`
+	OutPath           string   `help:"Path where BitTorrent writes the downloaded file"`
+	Peer              string   `help:"Remote SCION address"`
+	Seed              bool     `help:"Start BitTorrent in Seeder mode"`
+	File              string   `help:"Load the file to which the torrent of InPath refers. Only required if seed=true"`
+	Local             string   `help:"Local SCION address of the seeder"`
+	HttpApi           bool     `help:"Start HTTP API. This is a special mode, no immediate downloading/seeding of specified file will happen."`
+	HttpApiFileDir    string   `help:"Directory used to store downloaded files or files to seed (default: ~/.bittorrent-over-scion/files). Only for httpApi=true"`
+	HttpApiDbFile     string   `help:"File path where the SQLite database for the HTTP API will be stored (default: ~/.bittorrent-over-scion/bittorrent-over-scion.sqlite3). Only for httpApi=true"`
+	HttpApiAddr       string   `help:"Optional: Configure the IP and port the HTTP API will bind on (default 127.0.0.1:8000). Only for httpApi=true"`
+	HttpApiMaxSize    int      `help:"Optional: Set the maximum size in bytes that is uploadable through HTTP API at once (all files in total, more specifically the maximum request body size, default ~128 MByte). Only for httpApi=true"`
+	SeedStartPort     int      `help:"Optional: Start for ports used for the servers that seed individual torrents (unless explicitly specified). Only for httpApi=true"`
+	NumPaths          int      `help:"Optional: Limit the number of paths the seeder uses to upload to each leecher. Per default 0, meaning the seeder aims to distribute paths in a fair manner to all leechers"`
+	DialBackStartPort int      `help:"Optional: Start port of the connections the seeder uses to dial back to the leecher."`
+	LogLevel          string   `help:"Optional: Change log level"`
+	EnableDht         bool     `help:"Optional: Run a dht network to announce peers"`
+	DhtPort           int      `help:"Optional: Configure the port to run the dht network"`
+	DhtBootstrapAddr  []string `help:"Optional: SCION address(es) of the dht network"`
+	PrintMetrics      bool     `help:"Optional: Display per-path metrics at the end of the download. Only for seed=false"`
+	ExportMetricsTo   string   `help:"Optional: Export per-path metrics to a particular target, at the moment a csv file (e.g. /tmp/metrics.csv)"`
 }{
 	Seed:              false,
+	HttpApi:           false,
+	HttpApiAddr:       "127.0.0.1:8000",
+	HttpApiMaxSize:    128 * 1000000, // 128 MByte
+	SeedStartPort:     44000,
 	NumPaths:          0,
 	DialBackStartPort: 45000,
 	LogLevel:          "INFO",
@@ -68,15 +81,93 @@ func main() {
 	tagflag.Parse(&flags)
 	setLogging(flags.LogLevel)
 
+	// parse bootstrap nodes
+	dhtBootstrapNodes := make([]dht.Addr, len(flags.DhtBootstrapAddr))
+	for i, addr := range flags.DhtBootstrapAddr {
+		udpAddr, err := snet.ParseUDPAddr(addr)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+		dhtBootstrapNodes[i] = dht.NewAddr(*udpAddr)
+	}
+
+	if flags.HttpApi {
+		log.Info("Starting in HTTP API mode...")
+
+		log.Info("[HTTP API] Initializing storage...")
+		storage_ := &storage.Storage{DbBackend: storage.Sqlite}
+		if flags.HttpApiFileDir == "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+
+			flags.HttpApiFileDir = filepath.Join(homeDir, ".bittorrent-over-scion")
+			flags.HttpApiFileDir = filepath.Join(flags.HttpApiFileDir, "files")
+		}
+		if flags.HttpApiDbFile == "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+
+			flags.HttpApiDbFile = filepath.Join(homeDir, ".bittorrent-over-scion")
+			err = os.MkdirAll(flags.HttpApiDbFile, os.ModePerm)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			flags.HttpApiDbFile = filepath.Join(flags.HttpApiDbFile, "bittorrent-over-scion.sqlite3")
+		}
+		//err := storage_.Init("file::memory:?cache=shared") // in-memory SQLite database
+		err := storage_.Init(flags.HttpApiFileDir, flags.HttpApiDbFile)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Info("[HTTP API] Initializing HTTP API...")
+		api := http_api.HttpApi{
+			HttpBindAddr:           flags.HttpApiAddr,
+			HttpMaxRequestBodySize: flags.HttpApiMaxSize,
+			EnableDht:              flags.EnableDht, //TODO make this configurable per torrent?
+			DhtPort:                uint16(flags.DhtPort),
+			DhtBootstrapNodes:      dhtBootstrapNodes,
+			ScionLocalHost:         flags.Local,
+			NumPaths:               flags.NumPaths,
+			DialBackStartPort:      uint16(flags.DialBackStartPort),
+			SeedStartPort:          uint16(flags.SeedStartPort),
+			Storage:                storage_,
+		}
+		err = api.Init()
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Info("[HTTP API] Loading existing torrent tasks from storage...")
+		err = api.LoadFromStorage()
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Info("[HTTP API] Starting web server...")
+		err = api.ListenAndServe()
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
+	}
+
 	log.Infof("Input %s, Output %s, Peer %s, seed %t, file %s", flags.InPath, flags.OutPath, flags.Peer, flags.Seed, flags.File)
 
 	peerDiscoveryConfig := config.DefaultPeerDisoveryConfig()
-
 	peerDiscoveryConfig.EnableDht = flags.EnableDht
-	dhtAddr, err := snet.ParseUDPAddr(flags.DhtBootstrapAddr)
-	if err == nil {
-		peerDiscoveryConfig.DhtNodes = []dht.Addr{dht.NewAddr(*dhtAddr)}
-	}
+	peerDiscoveryConfig.DhtNodes = dhtBootstrapNodes
 	if flags.DhtPort > 0 {
 		peerDiscoveryConfig.DhtPort = uint16(flags.DhtPort)
 	}
@@ -85,6 +176,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Debugf("TorrentFile{Announce: \"%s\", Length: %d, Name: \"%s\", PieceLength: %d}", tf.Announce, tf.Length, tf.Name, tf.PieceLength)
+
 	tf.PrintMetrics = flags.PrintMetrics
 	if flags.Seed {
 		log.Info("Loading file to RAM...")
@@ -103,14 +196,14 @@ func main() {
 			DiscoveryConfig:             &peerDiscoveryConfig,
 			ExportMetricsTarget:         flags.ExportMetricsTo,
 		}
-		server, err := server.NewServer(&conf)
+		server_, err := server.NewServer(&conf)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		log.Info("Created Server")
 
-		err = server.ListenHandshake()
+		err = server_.ListenHandshake(context.Background())
 		if err != nil {
 			log.Fatal(err)
 		}

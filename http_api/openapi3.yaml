@@ -1,0 +1,712 @@
+openapi: 3.0.3
+info:
+  title: BitTorrent-over-SCION HTTP API
+  description: |-
+    Specifies the endpoints provided by the HTTP API of the [BitTorrent-over-SCION project](https://github.com/netsys-lab/bittorrent-over-scion) that are also used by the web frontend.
+    See its [README](https://github.com/netsys-lab/bittorrent-over-scion/tree/feature/http-ui) on how to start the API.
+  contact:
+    email: jon-mailes.graeffe@ovgu.de
+  license:
+    name: GPL-3.0
+    url: https://www.gnu.org/licenses/gpl-3.0.de.html
+  version: 0.0.1
+servers:
+  - url: 'http://localhost:8000'
+paths:
+  /api/info:
+    get:
+      summary: Provides information about the API and its dependencies
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiInfo'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/torrent:
+    get:
+      summary: Lists all torrents with their statuses
+      tags:
+        - torrent
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Torrent'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Adds a torrent for download and/or seeding
+      tags:
+        - torrent
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                seedOnCompletion:
+                  type: boolean
+                  description: determines wether the torrent shall be seeded once finished or not
+                seedPort:
+                  type: integer
+                  format: uint
+                  description: port used for seeding
+                enableDht:
+                  type: boolean
+                  description: determines wether Dynamic Hash Table shall be enabled or not (currently only placeholder, does nothing)
+                enableTrackers:
+                  type: boolean
+                  description: determines wether trackers shall be used to gather peers or not (currently only placeholder, does nothing)
+                torrentFile:
+                  type: string
+                  format: binary
+                  description: torrent file containing metadata about the torrent's content
+                files:
+                  type: array
+                  description: list of files associated to the torrent
+                  items:
+                    $ref: '#/components/schemas/File'
+                peers:
+                  type: array
+                  description: list of peers used for leeching or seeding
+                  items:
+                    $ref: '#/components/schemas/Peer'
+              required:
+                - torrentFile
+                - files
+                - peers
+              example:
+                torrentFile: "<file>"
+                seedPort: 51000
+      responses:
+        '201':
+          description: created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Torrent'
+        '400':
+          description: invalid or missing value(s), see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: request body too large (probably files)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: invalid content type ("multipart/form-data" wanted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/torrent/{torrent}:
+    get:
+      summary: Get details for a torrent by ID
+      tags:
+        - torrent
+      parameters:
+        - name: torrent
+          in: path
+          description: ID of the torrent of interest
+          required: true
+          schema:
+            type: integer
+            format: uint
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Torrent'
+        '400':
+          description: invalid ID specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: torrent with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Updates configuration OR requests state change of a torrent
+      tags:
+        - torrent
+      parameters:
+        - name: torrent
+          in: path
+          description: ID of the torrent of interest
+          required: true
+          schema:
+            type: integer
+            format: uint
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                seedOnCompletion:
+                  type: boolean
+                  description: determines wether the torrent shall be seeded once finished or not
+                action:
+                  type: string
+                  description: action to execute (if specified will skip configuration updates)
+                  enum: [cancel, retry]
+      responses:
+        '200':
+          description: updated configuration or requested state change successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Torrent'
+        '400':
+          description: invalid value specified, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: torrent is not in proper current state, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        
+        '415':
+          description: invalid content type ("multipart/form-data" wanted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Deletes stopped/finished torrent
+      tags:
+        - torrent
+      parameters:
+        - name: torrent
+          in: path
+          description: ID of the torrent of interest
+          required: true
+          schema:
+            type: integer
+            format: uint
+        - name: deleteFiles
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Set to true if files (downloaded files, torrent file) shall be deleted from disk as well
+      responses:
+        '200':
+          description: deleted successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: null
+                nullable: true
+        '400':
+          description: invalid value specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: torrent with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: torrent is running, stop it before deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/torrent/{torrent}/file/{file}:
+    get:
+      summary: Get content of a downloaded file
+      tags:
+        - torrent
+      parameters:
+        - name: torrent
+          in: path
+          description: ID of the torrent the file belongs to
+          required: true
+          schema:
+            type: integer
+            format: uint
+        - name: file
+          in: path
+          description: ID of the file of interest
+          required: true
+          schema:
+            type: integer
+            format: uint
+      responses:
+        '200':
+          description: successful
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: invalid file and/or torrent ID specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: file and/or torrent with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/torrent/{torrent}/file/torrent:
+    get:
+      summary: Get content of torrent file (as originally uploaded)
+      tags:
+        - torrent
+      parameters:
+        - name: torrent
+          in: path
+          description: ID of the torrent the file belongs to
+          required: true
+          schema:
+            type: integer
+            format: uint
+      responses:
+        '200':
+          description: successful
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: invalid torrent ID or file ID specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: torrent with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/tracker:
+    get:
+      summary: Lists all trackers
+      tags:
+        - tracker
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tracker'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Adds a tracker
+      tags:
+        - tracker
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+              required:
+                - url
+              example:
+                url: "http://tracker.openbittorrent.com:80/announce"
+      responses:
+        '201':
+          description: created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tracker'
+        '400':
+          description: missing or invalid tracker URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: tracker with given URL already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/tracker/{tracker}:
+    get:
+      summary: Get details for a tracker by ID
+      tags:
+        - tracker
+      parameters:
+        - name: tracker
+          in: path
+          description: ID of the tracker of interest
+          required: true
+          schema:
+            type: integer
+            format: uint
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tracker'
+        '400':
+          description: invalid ID specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: tracker with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Deletes tracker
+      tags:
+        - tracker
+      parameters:
+        - name: tracker
+          in: path
+          description: ID of the tracker of interest
+          required: true
+          schema:
+            type: integer
+            format: uint
+      responses:
+        '200':
+          description: deleted successfully
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: null
+                nullable: true
+        '400':
+          description: invalid ID specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: tracker with given ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/settings:
+    get:
+      summary: Get settings of the API instance
+      tags:
+        - settings
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSettings'
+    post:
+      summary: Updates settings of the API instance
+      tags:
+        - settings
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ApiSettings'
+      responses:
+        '200':
+          description: updated settings successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiSettings'
+        '400':
+          description: invalid value specified, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: invalid content type ("multipart/form-data" wanted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: internal server error, see error field for details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /frontend:
+    get:
+      summary: Serves the web frontend that utilizes this API
+      responses:
+        '200':
+          description: successful
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: human-readable error message
+          example: <human-readable error message>
+    ApiInfo:
+      type: object
+      properties:
+        version:
+          type: string
+          description: application version
+          example: 0.0.1
+    Peer:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint
+          description: unique identifier
+          example: 42
+        torrentId:
+          type: integer
+          format: uint
+          description: torrent ID
+          example: 17
+        address:
+          type: string
+          description: SCION address of peer to leech from or seed to
+          example: "19-ffaa:1:10ff,[127.0.0.1]:43000"
+    File:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint
+          description: unique identifier
+          example: 42
+        path:
+          type: string
+          description: path to file with file name
+          example: "sample"
+        length:
+          type: integer
+          format: uint
+          description: length of file in bytes
+          example: 1337
+    Metrics:
+      type: object
+      properties:
+        rx:
+          type: integer
+          format: uint
+          description: current read bandwidth
+          example: 9000
+        tx:
+          type: integer
+          format: uint
+          description: current written bandwidth
+          example: 1337
+        numConns:
+          type: integer
+          format: uint
+          description: current number of connections
+          example: 7
+        numPaths:
+          type: integer
+          format: uint
+          description: current number of unique used SCION paths
+          example: 1
+    Torrent:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint
+          description: unique identifier
+          example: 42
+        name:
+          type: string
+          description: human-friendly name
+          example: "sample.torrent"
+        peers:
+          type: array
+          description: list of peers used for leeching or seeding
+          items:
+            $ref: '#/components/schemas/Peer'
+        seedOnCompletion:
+          type: boolean
+          description: determines wether the torrent shall be seeded once finished or not
+        seedPort:
+          type: integer
+          format: uint
+          description: port used for seeding
+          example: 51000
+        enableDht:
+          type: boolean
+          description: determines wether Dynamic Hash Table shall be enabled or not (currently only placeholder, does nothing)
+        enableTrackers:
+          type: boolean
+          description: determines wether trackers shall be used to gather peers or not (currently only placeholder, does nothing)
+        status:
+          type: string
+          description: human-friendly status (usually empty unless error occured)
+          example: "error description"
+        files:
+          type: array
+          description: list of files associated to the torrent
+          items:
+            $ref: '#/components/schemas/File'
+        metrics:
+          type: object
+          description: live networking metrics
+          $ref: '#/components/schemas/Metrics'
+        seedAddr:
+          type: string
+          description: SCION address the seeder listens on (to tell other peers)
+          example: "19-ffaa:1:106d,[127.0.0.1]:44000"
+        state:
+          type: string
+          description: state the torrent is in
+          enum: [not_started_yet, running, failed, completed, cancelled, seeding]
+        numPieces:
+          type: number
+          format: uint
+          description: total number of pieces the torrent consists of
+          example: 1337
+        numDownloadedPieces:
+          type: number
+          format: uint
+          description: number of pieces already downloaded
+          example: 0
+        pieceLength:
+          type: number
+          format: uint
+          description: length of a single piece
+          example: 65536
+    Tracker:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: uint
+          description: unique identifier
+          example: 42
+        url:
+          type: string
+          description: URL to tracker
+          example: "http://tracker.openbittorrent.com:80/announce"
+    ApiSettings:
+      type: object
+      properties:
+        dhtPort:
+          type: integer
+          format: uint
+          description: port used for DHT coordination (currently only placeholder, does nothing)
+          example: 50000
+        dhtBootstrapNodes:
+          type: array
+          description: list of SCION addresses for nodes used to bootstrap DHT (currently only placeholder, does nothing) 
+          items:
+            type: string

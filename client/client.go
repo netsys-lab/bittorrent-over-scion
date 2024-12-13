@@ -5,6 +5,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -131,6 +132,7 @@ func (mp *MPClient) GetSocket() *smp.MPPeerSock {
 }
 
 func (mp *MPClient) DialAndWaitForConnectBack(
+	ctx context.Context,
 	local string,
 	peer peers.Peer,
 	peerID,
@@ -188,7 +190,7 @@ func (mp *MPClient) DialAndWaitForConnectBack(
 	}
 
 	// Wait for incoming connections
-	_, err = mpSock.WaitForPeerConnect(nil)
+	_, err = mpSock.WaitForPeerConnectWithContext(ctx, nil)
 
 	if err != nil {
 		return nil, err
